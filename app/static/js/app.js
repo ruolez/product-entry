@@ -453,22 +453,26 @@ function bindPriceEngine() {
 }
 
 function applyPriceFormulas() {
+    // Client-side: only calculate display prices (UnitPrice, UnitPriceC) from
+    // the user-entered base cost. UnitCost is NEVER overwritten on the client.
+    // Per-store cost adjustments (UnitCost formulas) happen server-side only
+    // during INSERT, where each store gets its own adjusted cost.
+    const baseCost = parseFloat(document.getElementById("field-UnitCost")?.value) || 0;
+    if (baseCost <= 0) return;
+
     const primaryStoreId = state.selectedStoreIds[0];
     const formulas = state.priceFormulas[primaryStoreId] || [];
 
-    // Resolve formulas in order (allows chaining: Cost -> Price -> DeliveryB)
     for (const f of formulas) {
+        if (f.target_field === "UnitCost") continue;
+
         const targetField = document.getElementById(`field-${f.target_field}`);
         if (!targetField || targetField.dataset.userOverride === "true") continue;
 
-        // Get source value from the source field
-        const sourceField = document.getElementById(`field-${f.source_field}`);
-        const sourceVal = parseFloat(sourceField?.value) || 0;
-        if (sourceVal <= 0 && f.operator !== "fixed") continue;
-
+        // Client always calculates from the user-entered base cost
         let value;
-        if (f.operator === "multiply") value = sourceVal * parseFloat(f.operand);
-        else if (f.operator === "add") value = sourceVal + parseFloat(f.operand);
+        if (f.operator === "multiply") value = baseCost * parseFloat(f.operand);
+        else if (f.operator === "add") value = baseCost + parseFloat(f.operand);
         else if (f.operator === "fixed") value = parseFloat(f.operand);
         else continue;
 

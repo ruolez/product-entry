@@ -40,20 +40,34 @@ def get_formulas_for_stores(store_ids):
 
 
 def calculate_prices(fields, store_id):
-    """Apply price formulas for a store. Fields dict is read for source values
-    and updated with calculated target values (only if target not already set)."""
+    """Apply price formulas for a store.
+
+    The user enters a BASE cost in UnitCost. Formulas can:
+    - Adjust UnitCost per store (e.g., UnitCost = UnitCost × 1.05)
+    - Calculate prices from UnitCost (e.g., UnitPrice = UnitCost × 1.20)
+    - Chain: first adjust cost, then prices use the adjusted cost
+
+    Formulas targeting UnitCost ALWAYS override the base cost (that's
+    their purpose - per-store cost adjustment). Other targets only fill
+    in if not already set by the user.
+    """
     formulas = get_formulas_for_store(store_id)
+    # Start with a copy of fields so we can chain (adjusted cost -> prices)
+    computed = dict(fields)
     results = {}
 
     for formula in formulas:
         target = formula["target_field"]
         source = formula.get("source_field", "UnitCost")
 
-        # Don't override if already provided by user
-        if target in fields and fields[target] not in (None, "", "0", "0.00"):
-            continue
+        # UnitCost formulas always apply (per-store cost adjustment).
+        # Other targets: skip if already provided by the user.
+        if target != "UnitCost":
+            existing = computed.get(target)
+            if existing not in (None, "", "0", "0.00"):
+                continue
 
-        source_val = fields.get(source) or results.get(source)
+        source_val = computed.get(source)
         if source_val is None:
             continue
         try:
@@ -76,5 +90,7 @@ def calculate_prices(fields, store_id):
 
         calculated = str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
         results[target] = calculated
+        # Update computed so subsequent formulas can chain off this result
+        computed[target] = calculated
 
     return results
