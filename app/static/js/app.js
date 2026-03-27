@@ -53,6 +53,10 @@ function renderStoreSelector(stores) {
             <span class="material-icons-round" style="font-size:18px;vertical-align:middle;margin-right:4px;">store</span>
             Target Stores
         </span>
+        <button class="store-chip toggle-all-chip" id="toggle-all-stores" title="Select All / None">
+            <span class="material-icons-round" style="font-size:16px;">select_all</span>
+            All
+        </button>
         ${stores.map(s => `
             <button class="store-chip" data-store-id="${s.id}" data-store-name="${s.name}">
                 <span class="material-icons-round chip-check">check</span>
@@ -60,12 +64,31 @@ function renderStoreSelector(stores) {
             </button>
         `).join("")}
     `;
-    container.querySelectorAll(".store-chip").forEach(chip => {
+    container.querySelectorAll(".store-chip[data-store-id]").forEach(chip => {
         chip.addEventListener("click", () => {
             chip.classList.toggle("selected");
+            updateToggleAllState();
             onStoreSelectionChange();
         });
     });
+    document.getElementById("toggle-all-stores").addEventListener("click", () => {
+        const chips = container.querySelectorAll(".store-chip[data-store-id]");
+        const allSelected = Array.from(chips).every(c => c.classList.contains("selected"));
+        chips.forEach(c => c.classList.toggle("selected", !allSelected));
+        updateToggleAllState();
+        onStoreSelectionChange();
+    });
+}
+
+function updateToggleAllState() {
+    const btn = document.getElementById("toggle-all-stores");
+    if (!btn) return;
+    const chips = document.querySelectorAll(".store-chip[data-store-id]");
+    const allSelected = Array.from(chips).every(c => c.classList.contains("selected"));
+    btn.classList.toggle("selected", allSelected);
+    btn.innerHTML = allSelected
+        ? '<span class="material-icons-round" style="font-size:16px;">deselect</span> None'
+        : '<span class="material-icons-round" style="font-size:16px;">select_all</span> All';
 }
 
 async function onStoreSelectionChange() {
