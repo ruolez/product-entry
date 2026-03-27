@@ -59,7 +59,7 @@
 
     .formula-row {
         display: grid;
-        grid-template-columns: 180px 150px 120px 100px 120px auto;
+        grid-template-columns: 160px 150px 150px 120px 100px auto;
         gap: var(--md-spacing-sm);
         align-items: center;
         padding: var(--md-spacing-sm) 0;
@@ -225,14 +225,15 @@
         </div>
         <div class="settings-section-body">
             <p class="text-sm text-muted" style="margin-bottom:var(--md-spacing-md);">
-                Define how prices auto-calculate from Unit Cost. Example: UnitPrice = UnitCost x 1.30 (30% markup).
+                Define how prices auto-calculate per store. Example: UnitPrice = UnitCost x 1.30 (30% markup).<br>
+                You can also set UnitCost per store from a base cost using formulas.
             </p>
             <div class="formula-row" style="border-bottom:2px solid var(--md-outline); padding-bottom:var(--md-spacing-sm);">
                 <span class="store-card-label">Store</span>
-                <span class="store-card-label">Target Price</span>
+                <span class="store-card-label">Target Field</span>
+                <span class="store-card-label">Source</span>
                 <span class="store-card-label">Operator</span>
                 <span class="store-card-label">Value</span>
-                <span class="store-card-label">Source</span>
                 <span></span>
             </div>
             <div id="formulas-list"></div>
@@ -457,22 +458,34 @@ function buildFormulaRow(f, index) {
     const storeOptions = stores.map(s =>
         `<option value="${s.id}" ${s.id == f.store_id ? 'selected' : ''}>${s.name}</option>`
     ).join("");
-    const targets = ["UnitPrice","UnitPriceA","UnitPriceB","UnitPriceC","MSRPrice"];
+    const targets = [
+        { value: "UnitCost",   label: "Unit Cost" },
+        { value: "UnitPrice",  label: "Standard Price" },
+        { value: "UnitPriceC", label: "Delivery B Price" },
+    ];
     const targetOptions = targets.map(t =>
-        `<option value="${t}" ${t === f.target_field ? 'selected' : ''}>${t}</option>`
+        `<option value="${t.value}" ${t.value === f.target_field ? 'selected' : ''}>${t.label}</option>`
+    ).join("");
+    const sources = [
+        { value: "UnitCost",   label: "Unit Cost" },
+        { value: "UnitPrice",  label: "Standard Price" },
+        { value: "UnitPriceC", label: "Delivery B Price" },
+    ];
+    const sourceOptions = sources.map(s =>
+        `<option value="${s.value}" ${s.value === f.source_field ? 'selected' : ''}>${s.label}</option>`
     ).join("");
 
     return `
         <div class="formula-row" data-index="${index}">
             <select class="form-select" data-field="store_id">${storeOptions}</select>
             <select class="form-select" data-field="target_field">${targetOptions}</select>
+            <select class="form-select" data-field="source_field">${sourceOptions}</select>
             <select class="form-select" data-field="operator">
                 <option value="multiply" ${f.operator==='multiply'?'selected':''}>Multiply (x)</option>
                 <option value="add" ${f.operator==='add'?'selected':''}>Add (+)</option>
                 <option value="fixed" ${f.operator==='fixed'?'selected':''}>Fixed ($)</option>
             </select>
             <input type="number" step="0.0001" class="form-input" data-field="operand" value="${f.operand}">
-            <span class="text-sm text-muted">from UnitCost</span>
             <button class="btn btn-icon btn-danger" onclick="removeFormula(${index})" style="padding:4px;">
                 <span class="material-icons-round" style="font-size:16px;">close</span>
             </button>
@@ -498,7 +511,7 @@ function bindFormulaEvents() {
         const data = Array.from(rows).map(row => ({
             store_id: parseInt(row.querySelector('[data-field="store_id"]').value),
             target_field: row.querySelector('[data-field="target_field"]').value,
-            source_field: "UnitCost",
+            source_field: row.querySelector('[data-field="source_field"]').value,
             operator: row.querySelector('[data-field="operator"]').value,
             operand: parseFloat(row.querySelector('[data-field="operand"]').value) || 0,
         }));

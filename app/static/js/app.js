@@ -292,49 +292,50 @@ async function loadPriceFormulas() {
 }
 
 function bindPriceEngine() {
-    const costField = document.getElementById("field-UnitCost");
-    if (!costField) return;
-
-    costField.addEventListener("input", () => {
-        const cost = parseFloat(costField.value);
-        if (isNaN(cost) || cost <= 0) return;
-        applyPriceFormulas(cost);
-        updateAllMargins();
-    });
-
-    ["field-UnitPrice", "field-UnitPriceA", "field-UnitPriceB", "field-UnitPriceC"].forEach(id => {
+    // Any price field change triggers formula recalculation
+    ["field-UnitCost", "field-UnitPrice", "field-UnitPriceC"].forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
         el.addEventListener("input", () => {
-            el.dataset.userOverride = "true";
-            el.classList.remove("auto-calculated");
+            // If user edits a field that is a formula target, mark as override
+            if (el.classList.contains("auto-calculated")) {
+                el.dataset.userOverride = "true";
+                el.classList.remove("auto-calculated");
+            }
+            applyPriceFormulas();
             updateAllMargins();
         });
     });
 }
 
-function applyPriceFormulas(cost) {
+function applyPriceFormulas() {
     const primaryStoreId = state.selectedStoreIds[0];
     const formulas = state.priceFormulas[primaryStoreId] || [];
 
+    // Resolve formulas in order (allows chaining: Cost -> Price -> DeliveryB)
     for (const f of formulas) {
-        const field = document.getElementById(`field-${f.target_field}`);
-        if (!field || field.dataset.userOverride === "true") continue;
+        const targetField = document.getElementById(`field-${f.target_field}`);
+        if (!targetField || targetField.dataset.userOverride === "true") continue;
+
+        // Get source value from the source field
+        const sourceField = document.getElementById(`field-${f.source_field}`);
+        const sourceVal = parseFloat(sourceField?.value) || 0;
+        if (sourceVal <= 0 && f.operator !== "fixed") continue;
 
         let value;
-        if (f.operator === "multiply") value = cost * parseFloat(f.operand);
-        else if (f.operator === "add") value = cost + parseFloat(f.operand);
+        if (f.operator === "multiply") value = sourceVal * parseFloat(f.operand);
+        else if (f.operator === "add") value = sourceVal + parseFloat(f.operand);
         else if (f.operator === "fixed") value = parseFloat(f.operand);
         else continue;
 
-        field.value = value.toFixed(2);
-        field.classList.add("auto-calculated");
+        targetField.value = value.toFixed(2);
+        targetField.classList.add("auto-calculated");
     }
 }
 
 function updateAllMargins() {
     const cost = parseFloat(document.getElementById("field-UnitCost")?.value) || 0;
-    ["UnitPrice", "UnitPriceA", "UnitPriceB", "UnitPriceC"].forEach(name => {
+    ["UnitPrice", "UnitPriceC"].forEach(name => {
         const price = parseFloat(document.getElementById(`field-${name}`)?.value) || 0;
         const marginEl = document.getElementById(`margin-${name}`);
         if (marginEl) {
