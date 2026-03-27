@@ -16,6 +16,16 @@ def get_subcategories(store_id, category_id):
     )
 
 
+def get_all_subcategories(store_id):
+    return execute_query(
+        store_id,
+        "SELECT s.SubCateID, s.SubCateName, s.CategoryID, c.CategoryName "
+        "FROM SubCategories_tbl s "
+        "JOIN Categories_tbl c ON s.CategoryID = c.CategoryID "
+        "ORDER BY c.CategoryName, s.SubCateName",
+    )
+
+
 def get_taxes(store_id):
     return execute_query(
         store_id,

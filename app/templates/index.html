@@ -65,6 +65,88 @@
         justify-content: space-between;
     }
 
+    /* ── Autocomplete ── */
+    .autocomplete-wrap {
+        position: relative;
+    }
+    .autocomplete-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        z-index: 60;
+        background: var(--md-surface);
+        border: 1px solid var(--md-outline);
+        border-top: none;
+        border-radius: 0 0 var(--md-radius-xs) var(--md-radius-xs);
+        max-height: 220px;
+        overflow-y: auto;
+        box-shadow: var(--md-elevation-2);
+    }
+    .autocomplete-item {
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 0.8125rem;
+        display: flex;
+        flex-direction: column;
+        border-bottom: 1px solid var(--md-outline-variant);
+    }
+    .autocomplete-item:last-child { border-bottom: none; }
+    .autocomplete-item:hover,
+    .autocomplete-item.active {
+        background: var(--md-primary-light);
+    }
+    .autocomplete-item .ac-subcat {
+        font-weight: 500;
+        color: var(--md-on-surface);
+    }
+    .autocomplete-item .ac-cat {
+        font-size: 0.7rem;
+        color: var(--md-on-surface-variant);
+        margin-top: 1px;
+    }
+    .autocomplete-item mark {
+        background: var(--md-warning-light);
+        color: inherit;
+        padding: 0;
+        border-radius: 2px;
+    }
+
+    /* Category breadcrumb */
+    .category-breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: var(--md-spacing-xs);
+        margin-top: var(--md-spacing-sm);
+        padding: 6px 10px;
+        background: var(--md-primary-light);
+        border-radius: var(--md-radius-xs);
+        font-size: 0.8125rem;
+    }
+    .breadcrumb-cat {
+        color: var(--md-on-surface-variant);
+        font-weight: 500;
+    }
+    .breadcrumb-sub {
+        color: var(--md-primary);
+        font-weight: 500;
+    }
+    .breadcrumb-clear {
+        margin-left: auto;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--md-on-surface-variant);
+        padding: 2px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+    }
+    .breadcrumb-clear:hover {
+        background: var(--md-surface);
+        color: var(--md-error);
+    }
+
     /* ── Inline pricing divider ── */
     .inline-pricing {
         margin-top: var(--md-spacing-md);
@@ -235,19 +317,24 @@
                         <div class="store-tabs" id="category-store-tabs">
                             <span class="text-muted text-sm">Select stores above</span>
                         </div>
-                        <div class="form-group" style="margin-bottom: var(--md-spacing-md);">
-                            <label>Main Category <span class="required-mark">*</span></label>
-                            <select class="form-select" id="field-CateID" name="CateID">
-                                <option value="">-- Select Category --</option>
-                            </select>
+                        <div class="form-group" style="margin-bottom: var(--md-spacing-sm);">
+                            <label>Sub Category <span class="required-mark">*</span></label>
+                            <div class="autocomplete-wrap">
+                                <input type="text" class="form-input" id="subcategory-search" placeholder="Type to search subcategory..." autocomplete="off">
+                                <div class="autocomplete-dropdown hidden" id="subcategory-dropdown"></div>
+                            </div>
+                            <input type="hidden" id="field-SubCateID" name="SubCateID">
+                            <input type="hidden" id="field-CateID" name="CateID">
+                            <div class="field-error" id="error-SubCateID"></div>
                             <div class="field-error" id="error-CateID"></div>
                         </div>
-                        <div class="form-group">
-                            <label>Sub Category <span class="required-mark">*</span></label>
-                            <select class="form-select" id="field-SubCateID" name="SubCateID">
-                                <option value="">-- Select Sub Category --</option>
-                            </select>
-                            <div class="field-error" id="error-SubCateID"></div>
+                        <div class="category-breadcrumb hidden" id="category-breadcrumb">
+                            <span class="breadcrumb-cat" id="breadcrumb-cat"></span>
+                            <span class="material-icons-round" style="font-size:14px; color:var(--md-on-surface-variant);">chevron_right</span>
+                            <span class="breadcrumb-sub" id="breadcrumb-sub"></span>
+                            <button class="breadcrumb-clear" id="breadcrumb-clear" title="Clear selection">
+                                <span class="material-icons-round" style="font-size:14px;">close</span>
+                            </button>
                         </div>
                         <div class="form-group" style="margin-top: var(--md-spacing-md);">
                             <label>Manufacturer</label>

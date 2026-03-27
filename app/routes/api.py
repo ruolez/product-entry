@@ -4,6 +4,7 @@ from services.store_connection import get_all_stores
 from services.lookup_service import (
     get_categories,
     get_subcategories,
+    get_all_subcategories,
     get_taxes,
     get_units,
     get_manufacturers,
@@ -46,6 +47,14 @@ def store_subcategories(store_id):
         return jsonify({"error": "category_id is required"}), 400
     try:
         return jsonify(get_subcategories(store_id, category_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/stores/<int:store_id>/all-subcategories")
+def store_all_subcategories(store_id):
+    try:
+        return jsonify(get_all_subcategories(store_id))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

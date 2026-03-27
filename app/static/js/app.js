@@ -33,6 +33,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     bindPriceEngine();
     bindKeyboardNav();
     bindActionButtons();
+    initSubcategoryAutocomplete();
 });
 
 // ── Store Selector ─────────────────────────────────────
@@ -149,70 +150,163 @@ async function switchCategoryStore(storeId) {
         t.classList.toggle("active", parseInt(t.dataset.storeId) === storeId);
     });
 
-    const catSelect = document.getElementById("field-CateID");
-    const subSelect = document.getElementById("field-SubCateID");
     const manuSelect = document.getElementById("field-ManuID");
+    const searchInput = document.getElementById("subcategory-search");
 
-    // Load categories and manufacturers in parallel
-    const [categories, manufacturers] = await Promise.all([
-        getCachedLookup("categories", storeId),
+    // Load all subcategories (with parent category) and manufacturers in parallel
+    const [allSubs, manufacturers] = await Promise.all([
+        getCachedLookup("all-subcategories", storeId),
         getCachedLookup("manufacturers", storeId),
     ]);
-
-    catSelect.innerHTML = '<option value="">-- Select Category --</option>' +
-        categories.map(c => `<option value="${c.CategoryID}">${c.CategoryName}</option>`).join("");
 
     manuSelect.innerHTML = '<option value="0">-- Select --</option>' +
         manufacturers.map(m => `<option value="${m.ManufacturerID}">${m.ManuName}</option>`).join("");
 
     // Restore saved values for this store
     const saved = state.perStoreData[storeId];
-    if (saved?.CateID) {
-        catSelect.value = saved.CateID;
-        await loadSubcategories(storeId, saved.CateID);
-        if (saved.SubCateID) subSelect.value = saved.SubCateID;
+    if (saved?.SubCateID && saved?.CateID) {
+        const match = allSubs.find(s => s.SubCateID === saved.SubCateID);
+        if (match) {
+            showCategoryBreadcrumb(match.CategoryName, match.SubCateName);
+            searchInput.value = "";
+        }
     } else {
-        subSelect.innerHTML = '<option value="">-- Select Sub Category --</option>';
+        clearCategoryBreadcrumb();
+        searchInput.value = "";
     }
     if (saved?.ManuID) {
         manuSelect.value = saved.ManuID;
     }
 }
 
-async function loadSubcategories(storeId, categoryId) {
-    const subSelect = document.getElementById("field-SubCateID");
-    const subs = await getCachedLookup("subcategories", storeId, categoryId);
-    subSelect.innerHTML = '<option value="">-- Select Sub Category --</option>' +
-        subs.map(s => `<option value="${s.SubCateID}">${s.SubCateName}</option>`).join("");
+// ── Subcategory Autocomplete ───────────────────────────
+function initSubcategoryAutocomplete() {
+    const input = document.getElementById("subcategory-search");
+    const dropdown = document.getElementById("subcategory-dropdown");
+    if (!input || !dropdown) return;
+
+    let activeIndex = -1;
+
+    input.addEventListener("input", debounce(async () => {
+        const query = input.value.trim().toLowerCase();
+        if (query.length < 1 || !state.activeCategoryStoreId) {
+            dropdown.classList.add("hidden");
+            return;
+        }
+
+        const allSubs = await getCachedLookup("all-subcategories", state.activeCategoryStoreId);
+        const matches = allSubs.filter(s =>
+            s.SubCateName.toLowerCase().includes(query) ||
+            s.CategoryName.toLowerCase().includes(query)
+        ).slice(0, 15);
+
+        if (!matches.length) {
+            dropdown.innerHTML = '<div class="autocomplete-item" style="color:var(--md-on-surface-variant);pointer-events:none;">No matches found</div>';
+            dropdown.classList.remove("hidden");
+            return;
+        }
+
+        activeIndex = -1;
+        dropdown.innerHTML = matches.map((m, i) => {
+            const subHighlighted = highlightMatch(m.SubCateName, query);
+            const catHighlighted = highlightMatch(m.CategoryName, query);
+            return `<div class="autocomplete-item" data-index="${i}" data-sub-id="${m.SubCateID}" data-cat-id="${m.CategoryID}" data-sub-name="${m.SubCateName}" data-cat-name="${m.CategoryName}">
+                <span class="ac-subcat">${subHighlighted}</span>
+                <span class="ac-cat">${catHighlighted}</span>
+            </div>`;
+        }).join("");
+        dropdown.classList.remove("hidden");
+
+        dropdown.querySelectorAll(".autocomplete-item[data-sub-id]").forEach(item => {
+            item.addEventListener("click", () => selectSubcategory(item));
+        });
+    }, 150));
+
+    input.addEventListener("keydown", (e) => {
+        const items = dropdown.querySelectorAll(".autocomplete-item[data-sub-id]");
+        if (!items.length || dropdown.classList.contains("hidden")) return;
+
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            activeIndex = Math.min(activeIndex + 1, items.length - 1);
+            updateActiveItem(items, activeIndex);
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            activeIndex = Math.max(activeIndex - 1, 0);
+            updateActiveItem(items, activeIndex);
+        } else if (e.key === "Enter") {
+            e.preventDefault();
+            if (activeIndex >= 0 && items[activeIndex]) {
+                selectSubcategory(items[activeIndex]);
+            }
+        } else if (e.key === "Escape") {
+            dropdown.classList.add("hidden");
+        }
+    });
+
+    input.addEventListener("focus", () => {
+        if (input.value.trim().length >= 1) {
+            input.dispatchEvent(new Event("input"));
+        }
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!e.target.closest(".autocomplete-wrap")) {
+            dropdown.classList.add("hidden");
+        }
+    });
 }
 
-// Category change handlers
-document.getElementById("field-CateID")?.addEventListener("change", async (e) => {
+function updateActiveItem(items, index) {
+    items.forEach((item, i) => item.classList.toggle("active", i === index));
+    if (items[index]) items[index].scrollIntoView({ block: "nearest" });
+}
+
+function selectSubcategory(item) {
+    const subId = parseInt(item.dataset.subId);
+    const catId = parseInt(item.dataset.catId);
+    const subName = item.dataset.subName;
+    const catName = item.dataset.catName;
     const storeId = state.activeCategoryStoreId;
-    if (!storeId) return;
-    const catId = parseInt(e.target.value) || null;
+
+    document.getElementById("field-SubCateID").value = subId;
+    document.getElementById("field-CateID").value = catId;
+    document.getElementById("subcategory-search").value = "";
+    document.getElementById("subcategory-dropdown").classList.add("hidden");
 
     if (!state.perStoreData[storeId]) state.perStoreData[storeId] = {};
     state.perStoreData[storeId].CateID = catId;
-    state.perStoreData[storeId].SubCateID = null;
+    state.perStoreData[storeId].SubCateID = subId;
+    state.perStoreData[storeId]._catName = catName;
+    state.perStoreData[storeId]._subName = subName;
 
-    if (catId) {
-        await loadSubcategories(storeId, catId);
-    } else {
-        document.getElementById("field-SubCateID").innerHTML =
-            '<option value="">-- Select Sub Category --</option>';
-    }
+    showCategoryBreadcrumb(catName, subName);
+    setFieldError("SubCateID", "");
+    setFieldError("CateID", "");
     renderCategoryTabs();
-});
+}
 
-document.getElementById("field-SubCateID")?.addEventListener("change", (e) => {
-    const storeId = state.activeCategoryStoreId;
-    if (!storeId) return;
-    if (!state.perStoreData[storeId]) state.perStoreData[storeId] = {};
-    state.perStoreData[storeId].SubCateID = parseInt(e.target.value) || null;
-    renderCategoryTabs();
-});
+function showCategoryBreadcrumb(catName, subName) {
+    const bc = document.getElementById("category-breadcrumb");
+    document.getElementById("breadcrumb-cat").textContent = catName;
+    document.getElementById("breadcrumb-sub").textContent = subName;
+    bc.classList.remove("hidden");
+}
 
+function clearCategoryBreadcrumb() {
+    document.getElementById("category-breadcrumb")?.classList.add("hidden");
+    document.getElementById("field-SubCateID").value = "";
+    document.getElementById("field-CateID").value = "";
+}
+
+function highlightMatch(text, query) {
+    if (!query) return text;
+    const idx = text.toLowerCase().indexOf(query);
+    if (idx === -1) return text;
+    return text.slice(0, idx) + "<mark>" + text.slice(idx, idx + query.length) + "</mark>" + text.slice(idx + query.length);
+}
+
+// Manufacturer change handler
 document.getElementById("field-ManuID")?.addEventListener("change", (e) => {
     const storeId = state.activeCategoryStoreId;
     if (!storeId) return;
@@ -224,14 +318,28 @@ document.getElementById("field-ManuID")?.addEventListener("change", (e) => {
 document.getElementById("apply-cats-all")?.addEventListener("click", () => {
     const source = state.perStoreData[state.activeCategoryStoreId];
     if (!source?.CateID) {
-        showToast("Select a category first", "warning");
+        showToast("Select a subcategory first", "warning");
         return;
     }
     state.selectedStoreIds.forEach(sid => {
         state.perStoreData[sid] = { ...source };
     });
     renderCategoryTabs();
-    showToast("Categories applied to all stores", "success");
+    showToast("Applied to all stores", "success");
+});
+
+// Breadcrumb clear
+document.getElementById("breadcrumb-clear")?.addEventListener("click", () => {
+    const storeId = state.activeCategoryStoreId;
+    if (storeId && state.perStoreData[storeId]) {
+        state.perStoreData[storeId].CateID = null;
+        state.perStoreData[storeId].SubCateID = null;
+        state.perStoreData[storeId]._catName = null;
+        state.perStoreData[storeId]._subName = null;
+    }
+    clearCategoryBreadcrumb();
+    renderCategoryTabs();
+    document.getElementById("subcategory-search")?.focus();
 });
 
 // ── Lookup Data Loading ────────────────────────────────
@@ -242,6 +350,7 @@ async function getCachedLookup(type, storeId, parentId) {
     let url;
     if (type === "categories") url = `/api/stores/${storeId}/categories`;
     else if (type === "subcategories") url = `/api/stores/${storeId}/subcategories?category_id=${parentId}`;
+    else if (type === "all-subcategories") url = `/api/stores/${storeId}/all-subcategories`;
     else if (type === "taxes") url = `/api/stores/${storeId}/taxes`;
     else if (type === "units") url = `/api/stores/${storeId}/units`;
     else if (type === "manufacturers") url = `/api/stores/${storeId}/manufacturers`;
@@ -591,6 +700,8 @@ function clearForm() {
     setFieldStatus("ProductSKU", "hidden");
 
     state.perStoreData = {};
+    clearCategoryBreadcrumb();
+    document.getElementById("subcategory-search").value = "";
     renderCategoryTabs();
     applyFieldDefaults(state.fieldConfigs);
     applyFieldVisibility(state.fieldConfigs);
