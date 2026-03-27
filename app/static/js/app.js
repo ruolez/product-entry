@@ -401,17 +401,20 @@ async function loadPriceFormulas() {
 }
 
 function bindPriceEngine() {
-    // Any price field change triggers formula recalculation
     ["field-UnitCost", "field-UnitPrice", "field-UnitPriceC"].forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
-        el.addEventListener("input", () => {
-            // If user edits a field that is a formula target, mark as override
+        // Use "change" (fires on blur/Enter) so formulas don't fire mid-typing
+        el.addEventListener("change", () => {
             if (el.classList.contains("auto-calculated")) {
                 el.dataset.userOverride = "true";
                 el.classList.remove("auto-calculated");
             }
             applyPriceFormulas();
+            updateAllMargins();
+        });
+        // Update margins live while typing (lightweight, no formula recalc)
+        el.addEventListener("input", () => {
             updateAllMargins();
         });
     });
