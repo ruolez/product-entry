@@ -39,27 +39,42 @@ def get_formulas_for_stores(store_ids):
     return grouped
 
 
-def calculate_prices(unit_cost, store_id):
-    if not unit_cost or float(unit_cost) <= 0:
-        return {}
-
-    cost = Decimal(str(unit_cost))
+def calculate_prices(fields, store_id):
+    """Apply price formulas for a store. Fields dict is read for source values
+    and updated with calculated target values (only if target not already set)."""
     formulas = get_formulas_for_store(store_id)
     results = {}
 
     for formula in formulas:
+        target = formula["target_field"]
+        source = formula.get("source_field", "UnitCost")
+
+        # Don't override if already provided by user
+        if target in fields and fields[target] not in (None, "", "0", "0.00"):
+            continue
+
+        source_val = fields.get(source) or results.get(source)
+        if source_val is None:
+            continue
+        try:
+            source_dec = Decimal(str(source_val))
+        except Exception:
+            continue
+
+        if source_dec <= 0 and formula["operator"] != "fixed":
+            continue
+
         operand = Decimal(str(formula["operand"]))
         if formula["operator"] == "multiply":
-            value = cost * operand
+            value = source_dec * operand
         elif formula["operator"] == "add":
-            value = cost + operand
+            value = source_dec + operand
         elif formula["operator"] == "fixed":
             value = operand
         else:
             continue
 
-        results[formula["target_field"]] = str(
-            value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        )
+        calculated = str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+        results[target] = calculated
 
     return results

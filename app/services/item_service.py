@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from models.settings import db
 from services.store_connection import execute_insert, get_store
+from services.price_engine import calculate_prices
 from services.validation_service import (
     validate_fields,
     validate_per_store_fields,
@@ -74,6 +75,23 @@ def get_field_configs():
     return [dict(r) for r in result.mappings().all()]
 
 
+def _apply_defaults(merged_fields, field_configs):
+    """Apply default values from field_configs for any field not already in the data."""
+    for fc in field_configs:
+        field_name = fc["field_name"]
+        default = fc.get("default_value")
+        if default is None or default == "" or default == "--":
+            continue
+        # Skip per-store fields (handled separately)
+        if fc.get("is_per_store"):
+            continue
+        # Only apply if the field is missing or empty in submitted data
+        current = merged_fields.get(field_name)
+        if current is None or current == "" or current == "undefined":
+            merged_fields[field_name] = default
+    return merged_fields
+
+
 def insert_item(data):
     store_ids = data["store_ids"]
     common_fields = data["common_fields"]
@@ -119,6 +137,15 @@ def insert_item(data):
         merged = {**common_fields}
         if sid in per_store_fields:
             merged.update(per_store_fields[sid])
+
+        # Apply defaults from field_configs for any missing fields
+        merged = _apply_defaults(merged, field_configs)
+
+        # Apply price formulas for this store (fills in calculated prices)
+        formula_results = calculate_prices(merged, store_id)
+        for field_name, value in formula_results.items():
+            if field_name not in merged or merged[field_name] in (None, "", "0", "0.00"):
+                merged[field_name] = value
 
         try:
             sql, params = _build_insert(merged)
