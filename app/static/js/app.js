@@ -23,6 +23,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         state.fieldConfigs = fieldConfigs;
         renderStoreSelector(stores);
         applyFieldDefaults(fieldConfigs);
+        applyFieldVisibility(fieldConfigs);
     } catch (err) {
         showToast("Failed to initialize. Check Settings.", "error");
         renderStoreSelector([]);
@@ -547,6 +548,7 @@ function clearForm() {
     state.perStoreCategories = {};
     renderCategoryTabs();
     applyFieldDefaults(state.fieldConfigs);
+    applyFieldVisibility(state.fieldConfigs);
 
     document.getElementById("field-ProductUPC")?.focus();
 }
@@ -563,6 +565,26 @@ function applyFieldDefaults(configs) {
             el.value = fc.default_value;
         } else if (!el.value) {
             el.value = fc.default_value;
+        }
+    });
+}
+
+function applyFieldVisibility(configs) {
+    configs.forEach(fc => {
+        const el = document.getElementById(`field-${fc.field_name}`);
+        if (!el) return;
+
+        // Walk up to the closest .form-group, table row, or grid cell
+        const container = el.closest(".form-group")
+            || el.closest("tr")
+            || el.closest(".price-cell")
+            || el.parentElement;
+        if (!container) return;
+
+        if (fc.is_visible) {
+            container.classList.remove("hidden");
+        } else {
+            container.classList.add("hidden");
         }
     });
 }
