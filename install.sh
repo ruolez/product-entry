@@ -57,8 +57,8 @@ generate_password() {
 }
 
 generate_fernet_key() {
-    python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())" 2>/dev/null \
-        || openssl rand -base64 32 | head -c 44
+    # Fernet key = 32 random bytes, url-safe base64 encoded (44 chars with = padding)
+    python3 -c "import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
 }
 
 get_status_info() {
@@ -574,6 +574,12 @@ do_update() {
         current_ip=$(grep '^SERVER_IP=' .env 2>/dev/null | cut -d'=' -f2)
         pg_pass=$(grep '^POSTGRES_PASSWORD=' .env 2>/dev/null | cut -d'=' -f2)
         fernet_key=$(grep '^FERNET_KEY=' .env 2>/dev/null | cut -d'=' -f2)
+    fi
+
+    # Validate Fernet key - must be exactly 44 chars base64. Regenerate if invalid.
+    if [ -z "$fernet_key" ] || [ ${#fernet_key} -ne 44 ]; then
+        fernet_key=$(generate_fernet_key)
+        log "Fernet key was invalid, regenerated new key"
     fi
 
     # Ask for IP (pre-filled with current)
