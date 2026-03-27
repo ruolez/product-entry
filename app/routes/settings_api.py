@@ -98,8 +98,11 @@ def delete_store(store_id):
 
 @settings_bp.route("/stores/<int:store_id>/test", methods=["POST"])
 def test_store_connection(store_id):
-    success, message = test_connection(store_id)
-    return jsonify({"success": success, "message": message}), 200 if success else 500
+    try:
+        success, message = test_connection(store_id)
+        return jsonify({"success": success, "message": message}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 200
 
 
 # --- Price Formulas ---
