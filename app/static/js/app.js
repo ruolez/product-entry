@@ -7,7 +7,7 @@ const state = {
     selectedStoreIds: [],
     fieldConfigs: [],
     priceFormulas: {},           // { storeId: [ {target_field, operator, operand} ] }
-    perStoreCategories: {},      // { storeId: { CateID, SubCateID } }
+    perStoreData: {},      // { storeId: { CateID, SubCateID, ManuID } }
     activeCategoryStoreId: null, // which store's categories are showing
     lookupCache: {},             // { "categories-1": [...], "subcategories-1-5": [...] }
 };
@@ -98,7 +98,8 @@ function renderCategoryTabs() {
 
     tabContainer.innerHTML = state.selectedStoreIds.map(sid => {
         const store = state.stores.find(s => s.id === sid);
-        const assigned = state.perStoreCategories[sid]?.CateID;
+        const data = state.perStoreData[sid];
+        const assigned = data?.CateID && data?.SubCateID;
         const statusClass = assigned ? "assigned" : "missing";
         const statusIcon = assigned ? "check_circle" : "radio_button_unchecked";
         return `
@@ -127,18 +128,31 @@ async function switchCategoryStore(storeId) {
 
     const catSelect = document.getElementById("field-CateID");
     const subSelect = document.getElementById("field-SubCateID");
+    const manuSelect = document.getElementById("field-ManuID");
 
-    const categories = await getCachedLookup("categories", storeId);
+    // Load categories and manufacturers in parallel
+    const [categories, manufacturers] = await Promise.all([
+        getCachedLookup("categories", storeId),
+        getCachedLookup("manufacturers", storeId),
+    ]);
+
     catSelect.innerHTML = '<option value="">-- Select Category --</option>' +
         categories.map(c => `<option value="${c.CategoryID}">${c.CategoryName}</option>`).join("");
 
-    const saved = state.perStoreCategories[storeId];
+    manuSelect.innerHTML = '<option value="0">-- Select --</option>' +
+        manufacturers.map(m => `<option value="${m.ManufacturerID}">${m.ManuName}</option>`).join("");
+
+    // Restore saved values for this store
+    const saved = state.perStoreData[storeId];
     if (saved?.CateID) {
         catSelect.value = saved.CateID;
         await loadSubcategories(storeId, saved.CateID);
         if (saved.SubCateID) subSelect.value = saved.SubCateID;
     } else {
         subSelect.innerHTML = '<option value="">-- Select Sub Category --</option>';
+    }
+    if (saved?.ManuID) {
+        manuSelect.value = saved.ManuID;
     }
 }
 
@@ -155,9 +169,9 @@ document.getElementById("field-CateID")?.addEventListener("change", async (e) =>
     if (!storeId) return;
     const catId = parseInt(e.target.value) || null;
 
-    if (!state.perStoreCategories[storeId]) state.perStoreCategories[storeId] = {};
-    state.perStoreCategories[storeId].CateID = catId;
-    state.perStoreCategories[storeId].SubCateID = null;
+    if (!state.perStoreData[storeId]) state.perStoreData[storeId] = {};
+    state.perStoreData[storeId].CateID = catId;
+    state.perStoreData[storeId].SubCateID = null;
 
     if (catId) {
         await loadSubcategories(storeId, catId);
@@ -171,20 +185,27 @@ document.getElementById("field-CateID")?.addEventListener("change", async (e) =>
 document.getElementById("field-SubCateID")?.addEventListener("change", (e) => {
     const storeId = state.activeCategoryStoreId;
     if (!storeId) return;
-    if (!state.perStoreCategories[storeId]) state.perStoreCategories[storeId] = {};
-    state.perStoreCategories[storeId].SubCateID = parseInt(e.target.value) || null;
+    if (!state.perStoreData[storeId]) state.perStoreData[storeId] = {};
+    state.perStoreData[storeId].SubCateID = parseInt(e.target.value) || null;
     renderCategoryTabs();
+});
+
+document.getElementById("field-ManuID")?.addEventListener("change", (e) => {
+    const storeId = state.activeCategoryStoreId;
+    if (!storeId) return;
+    if (!state.perStoreData[storeId]) state.perStoreData[storeId] = {};
+    state.perStoreData[storeId].ManuID = parseInt(e.target.value) || null;
 });
 
 // Apply to All
 document.getElementById("apply-cats-all")?.addEventListener("click", () => {
-    const source = state.perStoreCategories[state.activeCategoryStoreId];
+    const source = state.perStoreData[state.activeCategoryStoreId];
     if (!source?.CateID) {
         showToast("Select a category first", "warning");
         return;
     }
     state.selectedStoreIds.forEach(sid => {
-        state.perStoreCategories[sid] = { ...source };
+        state.perStoreData[sid] = { ...source };
     });
     renderCategoryTabs();
     showToast("Categories applied to all stores", "success");
@@ -213,10 +234,9 @@ async function getCachedLookup(type, storeId, parentId) {
 }
 
 async function loadLookupData(storeId) {
-    const [taxes, units, manufacturers] = await Promise.all([
+    const [taxes, units] = await Promise.all([
         getCachedLookup("taxes", storeId),
         getCachedLookup("units", storeId),
-        getCachedLookup("manufacturers", storeId),
     ]);
 
     populateSelect("field-ItemTaxID", taxes, "TaxID", "TaxName", "0", "None");
@@ -224,7 +244,6 @@ async function loadLookupData(storeId) {
     populateSelect("field-UnitID2", units, "UnitID", "UnitDesc", "0", "-- None --");
     populateSelect("field-UnitID3", units, "UnitID", "UnitDesc", "0", "-- None --");
     populateSelect("field-UnitID4", units, "UnitID", "UnitDesc", "0", "-- None --");
-    populateSelect("field-ManuID", manufacturers, "ManufacturerID", "ManuName", "0", "-- Select --");
 }
 
 function populateSelect(elementId, items, valueKey, labelKey, defaultVal, defaultLabel) {
@@ -415,7 +434,7 @@ function validateRequired() {
 
     // Per-store categories
     for (const sid of state.selectedStoreIds) {
-        const cats = state.perStoreCategories[sid];
+        const cats = state.perStoreData[sid];
         if (!cats?.CateID || !cats?.SubCateID) {
             const store = state.stores.find(s => s.id === sid);
             if (!firstError) {
@@ -443,10 +462,10 @@ function collectFormData() {
     };
 
     const commonFields = {};
-    const skip = ["CateID", "SubCateID"];
+    const perStoreFieldNames = ["CateID", "SubCateID", "ManuID"];
 
     state.fieldConfigs.forEach(fc => {
-        if (skip.includes(fc.field_name) || !fc.is_visible) return;
+        if (perStoreFieldNames.includes(fc.field_name) || !fc.is_visible) return;
         const val = getValue(fc.field_name);
         if (val !== undefined) commonFields[fc.field_name] = val;
     });
@@ -456,9 +475,11 @@ function collectFormData() {
 
     const perStoreFields = {};
     state.selectedStoreIds.forEach(sid => {
+        const data = state.perStoreData[sid] || {};
         perStoreFields[sid] = {
-            CateID: state.perStoreCategories[sid]?.CateID,
-            SubCateID: state.perStoreCategories[sid]?.SubCateID,
+            CateID: data.CateID,
+            SubCateID: data.SubCateID,
+            ManuID: data.ManuID || 0,
         };
     });
 
@@ -545,7 +566,7 @@ function clearForm() {
     setFieldStatus("ProductUPC", "hidden");
     setFieldStatus("ProductSKU", "hidden");
 
-    state.perStoreCategories = {};
+    state.perStoreData = {};
     renderCategoryTabs();
     applyFieldDefaults(state.fieldConfigs);
     applyFieldVisibility(state.fieldConfigs);

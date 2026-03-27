@@ -106,7 +106,7 @@ INSERT INTO field_configs (field_name, display_name, section, field_type, is_vis
 ('QuantOnOrder',   'On Order',          'inventory', 'number', TRUE,  FALSE, FALSE, NULL,   NULL, 20, 'Quantity on pending orders'),
 ('ReorderLevel',   'Reorder Point',     'inventory', 'number', TRUE,  FALSE, FALSE, '15',   NULL, 30, 'Minimum stock level before reorder'),
 ('ReorderQuant',   'Reorder Quantity',  'inventory', 'number', TRUE,  FALSE, FALSE, '0',    NULL, 40, 'Default reorder quantity'),
-('ManuID',         'Manufacturer',      'inventory', 'select', TRUE,  FALSE, FALSE, '0',    NULL, 50, 'Manufacturer'),
+('ManuID',         'Manufacturer',      'inventory', 'select', TRUE,  FALSE, TRUE,  '0',    NULL, 50, 'Manufacturer - may differ per store'),
 ('StLocationID',   'BIN Location',      'inventory', 'select', TRUE,  FALSE, FALSE, '0',    NULL, 60, 'Storage location'),
 ('CountInUnit',    'Base Unit Count',   'inventory', 'number', TRUE,  FALSE, FALSE, NULL,   NULL, 70, 'Units per base container'),
 ('ItemSize',       'Size',              'inventory', 'text',   TRUE,  FALSE, FALSE, NULL,   10,  80, 'Size descriptor (e.g. oz, ml)'),
