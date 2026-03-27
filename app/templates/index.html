@@ -6,37 +6,43 @@
 <style>
     .entry-page { padding-bottom: 80px; }
 
-    /* ── Adaptive flex rows (replace fixed grid) ── */
+    /* ── Adaptive flex rows ── */
     .flex-row {
         display: flex;
         flex-wrap: wrap;
         gap: var(--md-spacing-md);
         margin-bottom: var(--md-spacing-md);
     }
+    .flex-row:last-child { margin-bottom: 0; }
     .flex-row > .form-group {
         flex: 1 1 180px;
-        min-width: 150px;
+        min-width: 140px;
         max-width: 100%;
-    }
-    .flex-row > .form-group.wide {
-        flex: 2 1 300px;
     }
     .flex-row > .form-group.full {
         flex: 1 1 100%;
     }
-    /* Prevent single orphan field from stretching full width */
+    /* Prevent single orphan from stretching full width */
     .flex-row > .form-group:only-child:not(.full) {
-        max-width: 300px;
+        max-width: 280px;
     }
 
-    /* ── General section split layout ── */
+    /* ── General section: flex layout (not grid) ── */
     .general-split {
-        display: grid;
-        grid-template-columns: 320px 1fr;
+        display: flex;
         gap: var(--md-spacing-lg);
+        align-items: flex-start; /* top-align, no stretching */
+    }
+    .general-split > .category-panel {
+        flex: 0 0 300px;
+    }
+    .general-split > .general-fields {
+        flex: 1 1 0;
+        min-width: 0;
     }
     @media (max-width: 900px) {
-        .general-split { grid-template-columns: 1fr; }
+        .general-split { flex-direction: column; }
+        .general-split > .category-panel { flex: 1 1 auto; }
     }
 
     /* Category panel */
@@ -59,23 +65,20 @@
         justify-content: space-between;
     }
 
-    /* ── Pricing section ── */
-    .price-grid {
+    /* ── Pricing: all fields in one flex flow ── */
+    .pricing-fields {
         display: flex;
         flex-wrap: wrap;
         gap: var(--md-spacing-md);
-        justify-content: center;
+        align-items: flex-start;
     }
-    .price-grid .price-cell {
-        flex: 1 1 160px;
-        max-width: 240px;
-        text-align: center;
-    }
-    /* When only 1-2 prices visible, don't stretch too wide */
-    .price-grid .price-cell:only-child {
+    .pricing-fields > .form-group,
+    .pricing-fields > .price-cell {
+        flex: 1 1 180px;
+        min-width: 150px;
         max-width: 240px;
     }
-    .price-grid .price-cell .price-label {
+    .price-cell .price-label {
         font-family: var(--md-font-family);
         font-size: 0.7rem;
         font-weight: 500;
@@ -84,29 +87,11 @@
         color: var(--md-on-surface-variant);
         margin-bottom: var(--md-spacing-xs);
     }
-
-    .cost-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--md-spacing-lg);
-        align-items: end;
-        margin-bottom: var(--md-spacing-lg);
-    }
-    .cost-row > .form-group {
-        flex: 0 0 200px;
-    }
-    .cost-arrow {
-        display: flex;
-        align-items: center;
-        gap: var(--md-spacing-sm);
+    .margin-display {
+        font-size: 0.7rem;
         color: var(--md-on-surface-variant);
-        font-size: 0.75rem;
-        font-family: var(--md-font-family);
-        padding-bottom: 24px;
-    }
-    .cost-arrow .material-icons-round {
-        font-size: 20px;
-        color: var(--md-primary);
+        text-align: right;
+        margin-top: 2px;
     }
 
     /* ── Promotions sub-section ── */
@@ -261,7 +246,7 @@
                     </div>
 
                     <!-- Right: Product identifiers & metadata -->
-                    <div>
+                    <div class="general-fields">
                         <div class="flex-row">
                             <div class="form-group">
                                 <label>UPC <span class="required-mark">*</span></label>
@@ -354,8 +339,9 @@
                 <span class="material-icons-round expand-icon">expand_more</span>
             </div>
             <div class="section-body">
-                <div class="cost-row" id="cost-row">
-                    <div class="form-group">
+                <!-- All pricing in one flat flex row -->
+                <div class="pricing-fields" id="pricing-fields">
+                    <div class="form-group" id="cell-UnitCost">
                         <label>Unit Cost <span class="required-mark">*</span></label>
                         <div class="money-input-wrapper">
                             <span class="currency-symbol">$</span>
@@ -363,13 +349,6 @@
                         </div>
                         <div class="field-error" id="error-UnitCost"></div>
                     </div>
-                    <div class="cost-arrow" id="cost-arrow">
-                        <span class="material-icons-round">trending_flat</span>
-                        Auto-calculates prices from configured formulas
-                    </div>
-                </div>
-
-                <div class="price-grid" id="price-grid">
                     <div class="price-cell" id="cell-UnitPrice">
                         <div class="price-label">Standard Price <span class="required-mark">*</span></div>
                         <div class="money-input-wrapper">
@@ -403,10 +382,7 @@
                         </div>
                         <div class="margin-display" id="margin-UnitPriceC">Margin: --</div>
                     </div>
-                </div>
-
-                <div class="flex-row" id="msrp-row" style="margin-top: var(--md-spacing-md);">
-                    <div class="form-group">
+                    <div class="form-group" id="cell-MSRPrice">
                         <label>MSRP</label>
                         <div class="money-input-wrapper">
                             <span class="currency-symbol">$</span>

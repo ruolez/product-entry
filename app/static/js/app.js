@@ -596,31 +596,13 @@ function applyFieldVisibility(configs) {
         row.classList.toggle("hidden", !hasVisible);
     });
 
-    // Step 3: Hide cost-arrow if no price formulas are relevant (only cost+price visible)
-    const costArrow = document.getElementById("cost-arrow");
-    if (costArrow) {
-        const anyFormulaTarget = ["UnitPriceA", "UnitPriceB", "UnitPriceC"].some(f => {
-            const fc = configs.find(c => c.field_name === f);
-            return fc && fc.is_visible;
-        });
-        costArrow.classList.toggle("hidden", !anyFormulaTarget);
-    }
-
-    // Step 4: Hide price-grid if no price cells visible
-    const priceGrid = document.getElementById("price-grid");
-    if (priceGrid) {
-        const hasVisiblePrice = Array.from(priceGrid.children).some(
-            c => !c.classList.contains("hidden")
-        );
-        priceGrid.classList.toggle("hidden", !hasVisiblePrice);
-    }
-
-    // Step 5: Hide MSRP row
-    const msrpRow = document.getElementById("msrp-row");
-    if (msrpRow) {
-        const msrpCfg = configs.find(c => c.field_name === "MSRPrice");
-        msrpRow.classList.toggle("hidden", msrpCfg && !msrpCfg.is_visible);
-    }
+    // Step 3: In pricing-fields, hide individual cells by field name
+    ["UnitCost", "UnitPrice", "UnitPriceA", "UnitPriceB", "UnitPriceC", "MSRPrice"].forEach(f => {
+        const cell = document.getElementById(`cell-${f}`);
+        if (!cell) return;
+        const fc = configs.find(c => c.field_name === f);
+        cell.classList.toggle("hidden", fc && !fc.is_visible);
+    });
 
     // Step 6: Hide promotions subsection if all promo fields hidden
     const promoFields = ["PromotionID", "SPPromoted", "SPPromotionDescription", "SPPromotionCode", "ManuProductID"];
