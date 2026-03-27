@@ -283,7 +283,39 @@ function selectSubcategory(item) {
     showCategoryBreadcrumb(catName, subName);
     setFieldError("SubCateID", "");
     setFieldError("CateID", "");
+
+    // Auto-match: find same subcategory name in other stores that don't have one yet
+    autoMatchSubcategoryToOtherStores(storeId, subName);
+
     renderCategoryTabs();
+}
+
+async function autoMatchSubcategoryToOtherStores(sourceStoreId, subName) {
+    const nameLower = subName.toLowerCase();
+    let matched = 0;
+
+    for (const sid of state.selectedStoreIds) {
+        if (sid === sourceStoreId) continue;
+        // Skip stores that already have a subcategory selected
+        if (state.perStoreData[sid]?.SubCateID) continue;
+
+        const allSubs = await getCachedLookup("all-subcategories", sid);
+        const match = allSubs.find(s => s.SubCateName.toLowerCase() === nameLower);
+
+        if (match) {
+            if (!state.perStoreData[sid]) state.perStoreData[sid] = {};
+            state.perStoreData[sid].CateID = match.CategoryID;
+            state.perStoreData[sid].SubCateID = match.SubCateID;
+            state.perStoreData[sid]._catName = match.CategoryName;
+            state.perStoreData[sid]._subName = match.SubCateName;
+            matched++;
+        }
+    }
+
+    if (matched > 0) {
+        showToast(`Auto-matched "${subName}" in ${matched} other store${matched > 1 ? "s" : ""}`, "success");
+        renderCategoryTabs();
+    }
 }
 
 function showCategoryBreadcrumb(catName, subName) {
