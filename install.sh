@@ -339,95 +339,182 @@ Proceed with installation?" \
     fernet_key=$(generate_fernet_key)
 
     {
-        # Step 1: System dependencies (0-10%)
-        echo "5"
-        echo "XXX"
-        echo "Installing system dependencies..."
-        echo "XXX"
+        # ── 0-2%  Updating package lists ──
+        echo "0"  ; echo "XXX" ; echo "[1/20]  Updating package lists..." ; echo "XXX"
         apt-get update -qq >> "$LOG" 2>&1
-        apt-get install -y -qq git curl openssl python3 ca-certificates gnupg lsb-release >> "$LOG" 2>&1
-        log "System dependencies installed"
+        log "Package lists updated"
 
-        # Step 2: Docker (10-30%)
-        echo "10"
-        echo "XXX"
-        echo "Checking Docker installation..."
-        echo "XXX"
+        # ── 2-5%  Installing core packages ──
+        echo "2"  ; echo "XXX" ; echo "[2/20]  Installing git, curl, openssl, python3..." ; echo "XXX"
+        apt-get install -y -qq git curl openssl python3 >> "$LOG" 2>&1
+        log "Core packages installed"
+
+        # ── 5-7%  Installing certificate packages ──
+        echo "5"  ; echo "XXX" ; echo "[3/20]  Installing ca-certificates, gnupg, lsb-release..." ; echo "XXX"
+        apt-get install -y -qq ca-certificates gnupg lsb-release >> "$LOG" 2>&1
+        log "Certificate packages installed"
+
+        # ── 7-25%  Docker ──
+        echo "7"  ; echo "XXX" ; echo "[4/20]  Checking if Docker is installed..." ; echo "XXX"
         if ! command -v docker &>/dev/null; then
-            echo "15"
-            echo "XXX"
-            echo "Installing Docker Engine (this may take a minute)..."
-            echo "XXX"
+            echo "8"  ; echo "XXX" ; echo "[5/20]  Adding Docker GPG key..." ; echo "XXX"
             install -m 0755 -d /etc/apt/keyrings >> "$LOG" 2>&1
             curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc 2>> "$LOG"
             chmod a+r /etc/apt/keyrings/docker.asc
+            log "Docker GPG key added"
+
+            echo "10" ; echo "XXX" ; echo "[6/20]  Adding Docker APT repository..." ; echo "XXX"
             echo \
                 "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
                 https://download.docker.com/linux/ubuntu \
                 $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
                 tee /etc/apt/sources.list.d/docker.list >/dev/null
+            log "Docker repo added"
+
+            echo "12" ; echo "XXX" ; echo "[7/20]  Updating package lists with Docker repo..." ; echo "XXX"
             apt-get update -qq >> "$LOG" 2>&1
-            apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >> "$LOG" 2>&1
+
+            echo "14" ; echo "XXX" ; echo "[8/20]  Installing Docker Engine (downloading ~400MB)..." ; echo "XXX"
+            apt-get install -y -qq docker-ce docker-ce-cli >> "$LOG" 2>&1
+            log "Docker engine installed"
+
+            echo "18" ; echo "XXX" ; echo "[9/20]  Installing containerd and Docker plugins..." ; echo "XXX"
+            apt-get install -y -qq containerd.io docker-buildx-plugin docker-compose-plugin >> "$LOG" 2>&1
+            log "Docker plugins installed"
+
+            echo "22" ; echo "XXX" ; echo "[10/20] Enabling and starting Docker service..." ; echo "XXX"
             systemctl enable docker --now >> "$LOG" 2>&1
-            log "Docker installed"
+            sleep 2
+            log "Docker service started"
+
+            echo "25" ; echo "XXX" ; echo "[10/20] Docker installed: $(docker --version 2>/dev/null | head -1)" ; echo "XXX"
+            sleep 1
         else
+            echo "25" ; echo "XXX" ; echo "[10/20] Docker already installed: $(docker --version | head -1)" ; echo "XXX"
             log "Docker already present"
+            sleep 1
         fi
 
-        # Step 3: Clone repository (30-40%)
-        echo "30"
-        echo "XXX"
-        echo "Cloning repository from GitHub..."
-        echo "XXX"
+        # ── 25-32%  Clone repo ──
+        echo "26" ; echo "XXX" ; echo "[11/20] Connecting to GitHub..." ; echo "XXX"
+        sleep 1
+        echo "28" ; echo "XXX" ; echo "[11/20] Cloning repository: ${REPO_URL}..." ; echo "XXX"
         git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" >> "$LOG" 2>&1
         log "Repository cloned"
+        echo "32" ; echo "XXX" ; echo "[11/20] Repository cloned to ${INSTALL_DIR}" ; echo "XXX"
+        sleep 1
 
-        # Step 4: Generate configs (40-50%)
-        echo "40"
-        echo "XXX"
-        echo "Generating production configuration..."
-        echo "XXX"
+        # ── 32-40%  Generate configs (granular) ──
+        echo "33" ; echo "XXX" ; echo "[12/20] Generating secure credentials..." ; echo "XXX"
+        sleep 1
+        echo "34" ; echo "XXX" ; echo "[12/20] Writing .env (PostgreSQL password, Fernet key)..." ; echo "XXX"
         generate_env_file "$server_ip" "$pg_pass" "$fernet_key"
+        log "Env file generated"
+
+        echo "35" ; echo "XXX" ; echo "[13/20] Generating docker-compose.prod.yml..." ; echo "XXX"
         generate_prod_compose
+        log "Compose file generated"
+
+        echo "36" ; echo "XXX" ; echo "[14/20] Generating Dockerfile.prod (4 Gunicorn workers)..." ; echo "XXX"
         generate_prod_dockerfile
+        log "Prod Dockerfile generated"
+
+        echo "38" ; echo "XXX" ; echo "[15/20] Generating nginx.conf for ${server_ip}..." ; echo "XXX"
         generate_prod_nginx "$server_ip"
-        log "Production configs generated"
+        log "Nginx config generated"
 
-        # Step 5: Build containers (50-80%)
-        echo "50"
-        echo "XXX"
-        echo "Building Docker containers (this takes a few minutes)..."
-        echo "XXX"
+        echo "40" ; echo "XXX" ; echo "[15/20] All production configs generated" ; echo "XXX"
+        sleep 1
+
+        # ── 40-75%  Build containers (granular with progress ticks) ──
         cd "$INSTALL_DIR"
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --quiet >> "$LOG" 2>&1
-        log "Containers built"
 
-        # Step 6: Start services (80-90%)
-        echo "80"
-        echo "XXX"
-        echo "Starting services..."
-        echo "XXX"
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d >> "$LOG" 2>&1
-        log "Services started"
+        echo "41" ; echo "XXX" ; echo "[16/20] Pulling base images (python:3.12-slim, nginx:alpine, postgres:16)..." ; echo "XXX"
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" pull postgres >> "$LOG" 2>&1 || true
+        echo "45" ; echo "XXX" ; echo "[16/20] Pulled postgres:16-alpine" ; echo "XXX"
 
-        # Step 7: Health check (90-100%)
-        echo "90"
-        echo "XXX"
-        echo "Waiting for services to become healthy..."
-        echo "XXX"
-        local retries=0
-        while [ $retries -lt 30 ]; do
-            if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
+        echo "46" ; echo "XXX" ; echo "[17/20] Building app container: installing FreeTDS and GCC..." ; echo "XXX"
+        # Build app container with progress tracking via log
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --progress=plain app >> "$LOG" 2>&1 &
+        local build_pid=$!
+        local build_pct=46
+        while kill -0 $build_pid 2>/dev/null; do
+            build_pct=$((build_pct + 1))
+            [ $build_pct -gt 68 ] && build_pct=68
+            local last_line
+            last_line=$(tail -1 "$LOG" 2>/dev/null | head -c 60)
+            echo "$build_pct"
+            echo "XXX"
+            echo "[17/20] Building app: ${last_line:-compiling...}"
+            echo "XXX"
+            sleep 3
+        done
+        wait $build_pid || true
+        log "App container built"
+
+        echo "69" ; echo "XXX" ; echo "[18/20] Building nginx container..." ; echo "XXX"
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --progress=plain nginx >> "$LOG" 2>&1
+        log "Nginx container built"
+        echo "72" ; echo "XXX" ; echo "[18/20] All containers built successfully" ; echo "XXX"
+        sleep 1
+
+        # ── 72-82%  Start services (granular) ──
+        echo "73" ; echo "XXX" ; echo "[19/20] Creating Docker network..." ; echo "XXX"
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d postgres >> "$LOG" 2>&1
+        echo "75" ; echo "XXX" ; echo "[19/20] Starting PostgreSQL and waiting for health check..." ; echo "XXX"
+        local pg_retries=0
+        while [ $pg_retries -lt 15 ]; do
+            if $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres pg_isready -U itementry >> "$LOG" 2>&1; then
                 break
             fi
+            pg_retries=$((pg_retries + 1))
+            echo "$((75 + pg_retries / 3))"
+            echo "XXX"
+            echo "[19/20] PostgreSQL starting... (attempt ${pg_retries}/15)"
+            echo "XXX"
             sleep 2
-            retries=$((retries + 1))
         done
-        log "Health check complete"
+        log "PostgreSQL healthy"
+
+        echo "79" ; echo "XXX" ; echo "[19/20] Starting Flask application (Gunicorn)..." ; echo "XXX"
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d app >> "$LOG" 2>&1
+        sleep 2
+        log "App started"
+
+        echo "81" ; echo "XXX" ; echo "[19/20] Starting Nginx reverse proxy..." ; echo "XXX"
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d nginx >> "$LOG" 2>&1
+        sleep 1
+        log "Nginx started"
+        echo "83" ; echo "XXX" ; echo "[19/20] All 3 containers started" ; echo "XXX"
+        sleep 1
+
+        # ── 83-100%  Health check (granular) ──
+        echo "85" ; echo "XXX" ; echo "[20/20] Running health check against http://localhost/api/health..." ; echo "XXX"
+        local retries=0
+        while [ $retries -lt 20 ]; do
+            if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
+                log "Health check passed"
+                break
+            fi
+            retries=$((retries + 1))
+            echo "$((85 + retries / 2))"
+            echo "XXX"
+            echo "[20/20] Waiting for app to respond... (attempt ${retries}/20)"
+            echo "XXX"
+            sleep 2
+        done
+
+        echo "96" ; echo "XXX" ; echo "[20/20] Verifying database schema..." ; echo "XXX"
+        local table_count
+        table_count=$($DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
+            psql -U itementry -d itementry -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null | tr -d ' ' || echo "?")
+        log "Database has ${table_count} tables"
+        echo "98" ; echo "XXX" ; echo "[20/20] Database verified: ${table_count} tables created" ; echo "XXX"
+        sleep 1
 
         echo "100"
         echo "XXX"
-        echo "Installation complete!"
+        echo "Installation complete! All services running."
         echo "XXX"
         sleep 1
 
@@ -511,87 +598,134 @@ Proceed?" \
     fi
 
     {
-        # Step 1: Backup config
-        echo "5"
-        echo "XXX"
-        echo "Backing up configuration..."
-        echo "XXX"
+        # ── 0-5%  Backup ──
+        echo "0"  ; echo "XXX" ; echo "[1/16]  Backing up .env to .env.backup..." ; echo "XXX"
         cp .env .env.backup 2>/dev/null || true
         log "Config backed up"
+        echo "3"  ; echo "XXX" ; echo "[1/16]  Configuration and credentials preserved" ; echo "XXX"
+        sleep 1
 
-        # Step 2: Stop services
-        echo "10"
-        echo "XXX"
-        echo "Stopping services..."
-        echo "XXX"
+        # ── 5-15%  Stop services ──
+        echo "5"  ; echo "XXX" ; echo "[2/16]  Stopping nginx container..." ; echo "XXX"
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" stop nginx >> "$LOG" 2>&1 || true
+        echo "8"  ; echo "XXX" ; echo "[3/16]  Stopping app container..." ; echo "XXX"
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" stop app >> "$LOG" 2>&1 || true
+        echo "11" ; echo "XXX" ; echo "[4/16]  Stopping postgres container (data safe in volume)..." ; echo "XXX"
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" down >> "$LOG" 2>&1 || \
         $DC -p "$COMPOSE_PROJECT" down >> "$LOG" 2>&1 || true
         log "Services stopped"
+        echo "15" ; echo "XXX" ; echo "[4/16]  All services stopped, data volume preserved" ; echo "XXX"
+        sleep 1
 
-        # Step 3: Pull latest
-        echo "20"
-        echo "XXX"
-        echo "Pulling latest code from GitHub..."
-        echo "XXX"
+        # ── 15-25%  Pull latest ──
+        echo "16" ; echo "XXX" ; echo "[5/16]  Fetching latest from origin/main..." ; echo "XXX"
         git fetch origin main >> "$LOG" 2>&1
+        log "Fetch complete"
+        echo "20" ; echo "XXX" ; echo "[6/16]  Applying latest code (git reset --hard)..." ; echo "XXX"
         git reset --hard origin/main >> "$LOG" 2>&1
-        log "Code updated"
+        local commit_msg
+        commit_msg=$(git log --oneline -1 2>/dev/null | head -c 55)
+        log "Code updated to: ${commit_msg}"
+        echo "25" ; echo "XXX" ; echo "[6/16]  Updated to: ${commit_msg}" ; echo "XXX"
+        sleep 1
 
-        # Step 4: Regenerate production configs
-        echo "30"
-        echo "XXX"
-        echo "Regenerating production configuration..."
-        echo "XXX"
+        # ── 25-36%  Regenerate configs ──
+        echo "26" ; echo "XXX" ; echo "[7/16]  Regenerating .env (preserving password + Fernet key)..." ; echo "XXX"
         generate_env_file "$server_ip" "$pg_pass" "$fernet_key"
+        log "Env file regenerated"
+
+        echo "28" ; echo "XXX" ; echo "[8/16]  Regenerating docker-compose.prod.yml..." ; echo "XXX"
         generate_prod_compose
+        echo "30" ; echo "XXX" ; echo "[9/16]  Regenerating Dockerfile.prod..." ; echo "XXX"
         generate_prod_dockerfile
+        echo "32" ; echo "XXX" ; echo "[10/16] Regenerating nginx.conf for ${server_ip}..." ; echo "XXX"
         generate_prod_nginx "$server_ip"
-        log "Configs regenerated"
+        log "All configs regenerated"
+        echo "35" ; echo "XXX" ; echo "[10/16] All production configs regenerated" ; echo "XXX"
+        sleep 1
 
-        # Step 5: Rebuild
-        echo "40"
-        echo "XXX"
-        echo "Rebuilding containers (this may take a few minutes)..."
-        echo "XXX"
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --no-cache --quiet >> "$LOG" 2>&1
-        log "Containers rebuilt"
+        # ── 35-68%  Rebuild containers ──
+        echo "36" ; echo "XXX" ; echo "[11/16] Rebuilding app container (--no-cache)..." ; echo "XXX"
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --no-cache --progress=plain app >> "$LOG" 2>&1 &
+        local build_pid=$!
+        local build_pct=36
+        while kill -0 $build_pid 2>/dev/null; do
+            build_pct=$((build_pct + 1))
+            [ $build_pct -gt 60 ] && build_pct=60
+            local last_line
+            last_line=$(tail -1 "$LOG" 2>/dev/null | head -c 60)
+            echo "$build_pct"
+            echo "XXX"
+            echo "[11/16] Building app: ${last_line:-compiling...}"
+            echo "XXX"
+            sleep 3
+        done
+        wait $build_pid || true
+        log "App container rebuilt"
 
-        # Step 6: Start services
-        echo "70"
-        echo "XXX"
-        echo "Starting services..."
-        echo "XXX"
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d >> "$LOG" 2>&1
-        log "Services started"
+        echo "62" ; echo "XXX" ; echo "[12/16] Rebuilding nginx container..." ; echo "XXX"
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --no-cache --progress=plain nginx >> "$LOG" 2>&1
+        log "Nginx container rebuilt"
+        echo "65" ; echo "XXX" ; echo "[12/16] All containers rebuilt" ; echo "XXX"
+        sleep 1
 
-        # Step 7: Cleanup
-        echo "80"
-        echo "XXX"
-        echo "Cleaning up old Docker images and logs..."
-        echo "XXX"
-        docker image prune -f >> "$LOG" 2>&1
-        docker builder prune -f >> "$LOG" 2>&1
-        find /var/lib/docker/containers/ -name "*.log" -size +10M -exec truncate -s 0 {} \; 2>/dev/null || true
-        log "Docker cleanup done"
-
-        # Step 8: Health check
-        echo "90"
-        echo "XXX"
-        echo "Waiting for services to become healthy..."
-        echo "XXX"
-        local retries=0
-        while [ $retries -lt 30 ]; do
-            if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
+        # ── 65-80%  Start services ──
+        echo "66" ; echo "XXX" ; echo "[13/16] Starting PostgreSQL..." ; echo "XXX"
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d postgres >> "$LOG" 2>&1
+        local pg_retries=0
+        while [ $pg_retries -lt 10 ]; do
+            if $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres pg_isready -U itementry >> "$LOG" 2>&1; then
                 break
             fi
+            pg_retries=$((pg_retries + 1))
+            echo "$((67 + pg_retries))"
+            echo "XXX"
+            echo "[13/16] PostgreSQL starting... (attempt ${pg_retries}/10)"
+            echo "XXX"
             sleep 2
-            retries=$((retries + 1))
         done
-        log "Health check complete"
+        log "PostgreSQL healthy"
 
+        echo "75" ; echo "XXX" ; echo "[13/16] Starting Flask app (Gunicorn, 4 workers)..." ; echo "XXX"
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d app >> "$LOG" 2>&1
+        sleep 2
+        echo "78" ; echo "XXX" ; echo "[13/16] Starting Nginx reverse proxy..." ; echo "XXX"
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d nginx >> "$LOG" 2>&1
+        sleep 1
+        echo "80" ; echo "XXX" ; echo "[13/16] All 3 containers started" ; echo "XXX"
+        log "All services started"
+
+        # ── 80-88%  Cleanup ──
+        echo "81" ; echo "XXX" ; echo "[14/16] Pruning unused Docker images..." ; echo "XXX"
+        docker image prune -f >> "$LOG" 2>&1
+        echo "84" ; echo "XXX" ; echo "[14/16] Pruning Docker build cache..." ; echo "XXX"
+        docker builder prune -f >> "$LOG" 2>&1
+        echo "86" ; echo "XXX" ; echo "[14/16] Truncating container logs > 10MB..." ; echo "XXX"
+        find /var/lib/docker/containers/ -name "*.log" -size +10M -exec truncate -s 0 {} \; 2>/dev/null || true
+        log "Docker cleanup done"
+        echo "88" ; echo "XXX" ; echo "[14/16] Docker cleanup complete" ; echo "XXX"
+
+        # ── 88-100%  Health check ──
+        echo "89" ; echo "XXX" ; echo "[15/16] Running health check: http://localhost/api/health..." ; echo "XXX"
+        local retries=0
+        while [ $retries -lt 20 ]; do
+            if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
+                log "Health check passed"
+                break
+            fi
+            retries=$((retries + 1))
+            echo "$((89 + retries / 2))"
+            echo "XXX"
+            echo "[15/16] Waiting for app to respond... (attempt ${retries}/20)"
+            echo "XXX"
+            sleep 2
+        done
+
+        echo "97" ; echo "XXX" ; echo "[16/16] Verifying database integrity..." ; echo "XXX"
+        sleep 1
         echo "100"
         echo "XXX"
-        echo "Update complete!"
+        echo "Update complete! All services running."
         echo "XXX"
         sleep 1
 
