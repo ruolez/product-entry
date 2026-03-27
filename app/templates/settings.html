@@ -1,0 +1,578 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Item Entry{% endblock %}
+
+{% block head %}
+<style>
+    .settings-page { padding-bottom: 40px; }
+    .settings-section {
+        background: var(--md-surface);
+        border-radius: var(--md-radius-md);
+        border: 1px solid var(--md-outline);
+        margin-bottom: var(--md-spacing-lg);
+        overflow: hidden;
+    }
+    .settings-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--md-spacing-md) var(--md-spacing-lg);
+        border-bottom: 1px solid var(--md-outline-variant);
+    }
+    .settings-section-header h2 {
+        font-family: var(--md-font-family);
+        font-size: 1rem;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: var(--md-spacing-sm);
+    }
+    .settings-section-body {
+        padding: var(--md-spacing-lg);
+    }
+
+    .store-card {
+        display: grid;
+        grid-template-columns: 1fr 1fr 80px 1fr 1fr auto auto;
+        gap: var(--md-spacing-sm);
+        align-items: center;
+        padding: var(--md-spacing-md);
+        border: 1px solid var(--md-outline-variant);
+        border-radius: var(--md-radius-sm);
+        margin-bottom: var(--md-spacing-sm);
+        transition: box-shadow 0.2s;
+    }
+    .store-card:hover { box-shadow: var(--md-elevation-1); }
+    .store-card .form-input, .store-card .form-select {
+        padding: 6px 10px;
+        font-size: 0.8125rem;
+    }
+    .store-card-label {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--md-on-surface-variant);
+        font-family: var(--md-font-family);
+        font-weight: 500;
+        margin-bottom: 2px;
+    }
+
+    .formula-row {
+        display: grid;
+        grid-template-columns: 180px 150px 120px 100px 120px auto;
+        gap: var(--md-spacing-sm);
+        align-items: center;
+        padding: var(--md-spacing-sm) 0;
+        border-bottom: 1px solid var(--md-outline-variant);
+    }
+    .formula-row .form-input, .formula-row .form-select {
+        padding: 6px 10px;
+        font-size: 0.8125rem;
+    }
+
+    .field-config-row {
+        display: grid;
+        grid-template-columns: 180px 150px 100px 80px 80px 160px;
+        gap: var(--md-spacing-sm);
+        align-items: center;
+        padding: var(--md-spacing-xs) 0;
+        border-bottom: 1px solid var(--md-outline-variant);
+        font-size: 0.8125rem;
+    }
+    .field-config-row.header {
+        font-family: var(--md-font-family);
+        font-size: 0.7rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--md-on-surface-variant);
+        border-bottom: 2px solid var(--md-outline);
+        padding-bottom: var(--md-spacing-sm);
+    }
+
+    .toggle-switch {
+        position: relative;
+        width: 36px;
+        height: 20px;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-switch .slider {
+        position: absolute;
+        cursor: pointer;
+        inset: 0;
+        background: var(--md-outline);
+        border-radius: 20px;
+        transition: 0.3s;
+    }
+    .toggle-switch .slider:before {
+        content: "";
+        position: absolute;
+        height: 14px;
+        width: 14px;
+        left: 3px;
+        bottom: 3px;
+        background: white;
+        border-radius: 50%;
+        transition: 0.3s;
+    }
+    .toggle-switch input:checked + .slider {
+        background: var(--md-primary);
+    }
+    .toggle-switch input:checked + .slider:before {
+        transform: translateX(16px);
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: var(--md-radius-xl);
+        font-size: 0.7rem;
+        font-weight: 500;
+        font-family: var(--md-font-family);
+    }
+    .status-badge.success { background: var(--md-success-light); color: var(--md-success); }
+    .status-badge.error { background: var(--md-error-light); color: var(--md-error); }
+    .status-badge.pending { background: var(--md-surface-variant); color: var(--md-on-surface-variant); }
+
+    @media (max-width: 900px) {
+        .store-card { grid-template-columns: 1fr 1fr; }
+        .formula-row { grid-template-columns: 1fr 1fr; }
+        .field-config-row { grid-template-columns: 1fr 1fr 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="settings-page">
+    <div class="page-header">
+        <h1>Settings</h1>
+    </div>
+
+    <!-- ==================== STORE CONNECTIONS ==================== -->
+    <div class="settings-section">
+        <div class="settings-section-header">
+            <h2>
+                <span class="material-icons-round" style="color:var(--md-primary);font-size:20px;">dns</span>
+                Store Connections
+            </h2>
+            <button class="btn btn-primary" id="btn-add-store" style="padding:6px 16px; font-size:0.8125rem;">
+                <span class="material-icons-round" style="font-size:16px;">add</span>
+                Add Store
+            </button>
+        </div>
+        <div class="settings-section-body">
+            <div id="stores-list">
+                <p class="text-muted">Loading stores...</p>
+            </div>
+            <!-- Add/Edit Store Form (hidden by default) -->
+            <div id="store-form" class="hidden" style="margin-top:var(--md-spacing-md); padding:var(--md-spacing-md); background:var(--md-surface-variant); border-radius:var(--md-radius-sm);">
+                <h3 style="font-size:0.875rem; font-family:var(--md-font-family); font-weight:500; margin-bottom:var(--md-spacing-md);" id="store-form-title">Add New Store</h3>
+                <div class="form-row cols-3" style="margin-bottom:var(--md-spacing-md);">
+                    <div class="form-group">
+                        <label>Store Name <span class="required-mark">*</span></label>
+                        <input type="text" class="form-input" id="sf-name" placeholder="e.g. Store A">
+                    </div>
+                    <div class="form-group">
+                        <label>Host <span class="required-mark">*</span></label>
+                        <input type="text" class="form-input" id="sf-host" placeholder="192.168.1.100">
+                    </div>
+                    <div class="form-group">
+                        <label>Port</label>
+                        <input type="number" class="form-input" id="sf-port" value="1433">
+                    </div>
+                </div>
+                <div class="form-row cols-3" style="margin-bottom:var(--md-spacing-md);">
+                    <div class="form-group">
+                        <label>Database <span class="required-mark">*</span></label>
+                        <input type="text" class="form-input" id="sf-database" placeholder="S2S">
+                    </div>
+                    <div class="form-group">
+                        <label>Username <span class="required-mark">*</span></label>
+                        <input type="text" class="form-input" id="sf-username" placeholder="sa">
+                    </div>
+                    <div class="form-group">
+                        <label>Password <span class="required-mark">*</span></label>
+                        <input type="password" class="form-input" id="sf-password" placeholder="Password">
+                    </div>
+                </div>
+                <div class="flex gap-sm">
+                    <button class="btn btn-primary" id="btn-save-store" style="padding:6px 16px; font-size:0.8125rem;">Save Store</button>
+                    <button class="btn btn-secondary" id="btn-test-store" style="padding:6px 16px; font-size:0.8125rem;">
+                        <span class="material-icons-round" style="font-size:16px;">cable</span>
+                        Test Connection
+                    </button>
+                    <button class="btn btn-secondary" id="btn-cancel-store" style="padding:6px 16px; font-size:0.8125rem;">Cancel</button>
+                    <span id="test-result" class="text-sm" style="margin-left:auto;"></span>
+                </div>
+                <input type="hidden" id="sf-edit-id" value="">
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== PRICE FORMULAS ==================== -->
+    <div class="settings-section">
+        <div class="settings-section-header">
+            <h2>
+                <span class="material-icons-round" style="color:var(--md-success);font-size:20px;">calculate</span>
+                Price Formulas
+            </h2>
+            <button class="btn btn-primary" id="btn-save-formulas" style="padding:6px 16px; font-size:0.8125rem;">
+                <span class="material-icons-round" style="font-size:16px;">save</span>
+                Save Formulas
+            </button>
+        </div>
+        <div class="settings-section-body">
+            <p class="text-sm text-muted" style="margin-bottom:var(--md-spacing-md);">
+                Define how prices auto-calculate from Unit Cost. Example: UnitPrice = UnitCost x 1.30 (30% markup).
+            </p>
+            <div class="formula-row" style="border-bottom:2px solid var(--md-outline); padding-bottom:var(--md-spacing-sm);">
+                <span class="store-card-label">Store</span>
+                <span class="store-card-label">Target Price</span>
+                <span class="store-card-label">Operator</span>
+                <span class="store-card-label">Value</span>
+                <span class="store-card-label">Source</span>
+                <span></span>
+            </div>
+            <div id="formulas-list"></div>
+            <button class="btn btn-secondary" id="btn-add-formula" style="margin-top:var(--md-spacing-sm); padding:4px 12px; font-size:0.75rem;">
+                <span class="material-icons-round" style="font-size:14px;">add</span>
+                Add Formula
+            </button>
+        </div>
+    </div>
+
+    <!-- ==================== FIELD CONFIGURATION ==================== -->
+    <div class="settings-section">
+        <div class="settings-section-header">
+            <h2>
+                <span class="material-icons-round" style="color:#8430ce;font-size:20px;">tune</span>
+                Field Configuration
+            </h2>
+            <button class="btn btn-primary" id="btn-save-fields" style="padding:6px 16px; font-size:0.8125rem;">
+                <span class="material-icons-round" style="font-size:16px;">save</span>
+                Save Fields
+            </button>
+        </div>
+        <div class="settings-section-body">
+            <div class="field-config-row header">
+                <span>Field Name</span>
+                <span>Display Name</span>
+                <span>Section</span>
+                <span>Visible</span>
+                <span>Required</span>
+                <span>Default Value</span>
+            </div>
+            <div id="fields-list">
+                <p class="text-muted">Loading...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+import { api } from "/static/js/api-client.js";
+import { showToast } from "/static/js/utils.js";
+
+let stores = [];
+let formulas = [];
+let fieldConfigs = [];
+
+// ── Init ──
+document.addEventListener("DOMContentLoaded", async () => {
+    await Promise.all([loadStores(), loadFormulas(), loadFieldConfigs()]);
+    bindStoreEvents();
+    bindFormulaEvents();
+    bindFieldEvents();
+});
+
+// ── STORES ──
+async function loadStores() {
+    try {
+        stores = await api.get("/api/settings/stores");
+        renderStores();
+    } catch { stores = []; renderStores(); }
+}
+
+function renderStores() {
+    const el = document.getElementById("stores-list");
+    if (!stores.length) {
+        el.innerHTML = '<p class="text-muted">No stores configured yet. Click "Add Store" to get started.</p>';
+        return;
+    }
+    el.innerHTML = stores.map(s => `
+        <div class="store-card" data-id="${s.id}">
+            <div>
+                <div class="store-card-label">Name</div>
+                <strong style="font-size:0.875rem;">${s.name}</strong>
+            </div>
+            <div>
+                <div class="store-card-label">Host</div>
+                <span class="text-sm">${s.host}:${s.port}</span>
+            </div>
+            <div>
+                <div class="store-card-label">Port</div>
+                <span class="text-sm">${s.port}</span>
+            </div>
+            <div>
+                <div class="store-card-label">Database</div>
+                <span class="text-sm">${s.database_name}</span>
+            </div>
+            <div>
+                <div class="store-card-label">User</div>
+                <span class="text-sm">${s.username}</span>
+            </div>
+            <div>
+                <span class="status-badge ${s.is_active ? 'success' : 'error'}">
+                    ${s.is_active ? 'Active' : 'Inactive'}
+                </span>
+            </div>
+            <div class="flex gap-xs">
+                <button class="btn btn-icon btn-secondary" onclick="editStore(${s.id})" title="Edit">
+                    <span class="material-icons-round" style="font-size:16px;">edit</span>
+                </button>
+                <button class="btn btn-icon btn-secondary" onclick="testStoreConnection(${s.id}, this)" title="Test Connection">
+                    <span class="material-icons-round" style="font-size:16px;">cable</span>
+                </button>
+            </div>
+        </div>
+    `).join("");
+}
+
+function bindStoreEvents() {
+    document.getElementById("btn-add-store").addEventListener("click", () => {
+        document.getElementById("sf-edit-id").value = "";
+        document.getElementById("store-form-title").textContent = "Add New Store";
+        ["sf-name","sf-host","sf-database","sf-username","sf-password"].forEach(id =>
+            document.getElementById(id).value = "");
+        document.getElementById("sf-port").value = "1433";
+        document.getElementById("store-form").classList.remove("hidden");
+        document.getElementById("test-result").textContent = "";
+    });
+
+    document.getElementById("btn-cancel-store").addEventListener("click", () => {
+        document.getElementById("store-form").classList.add("hidden");
+    });
+
+    document.getElementById("btn-save-store").addEventListener("click", async () => {
+        const editId = document.getElementById("sf-edit-id").value;
+        const data = {
+            name: document.getElementById("sf-name").value,
+            host: document.getElementById("sf-host").value,
+            port: parseInt(document.getElementById("sf-port").value) || 1433,
+            database_name: document.getElementById("sf-database").value,
+            username: document.getElementById("sf-username").value,
+            password: document.getElementById("sf-password").value,
+        };
+
+        if (!data.name || !data.host || !data.database_name || !data.username) {
+            showToast("Fill in all required fields", "warning");
+            return;
+        }
+
+        try {
+            if (editId) {
+                await api.put(`/api/settings/stores/${editId}`, data);
+                showToast("Store updated", "success");
+            } else {
+                if (!data.password) { showToast("Password required", "warning"); return; }
+                await api.post("/api/settings/stores", data);
+                showToast("Store created", "success");
+            }
+            document.getElementById("store-form").classList.add("hidden");
+            await loadStores();
+            updateFormulaStoreOptions();
+        } catch (err) {
+            showToast(`Error: ${err.message}`, "error");
+        }
+    });
+
+    document.getElementById("btn-test-store").addEventListener("click", async () => {
+        const editId = document.getElementById("sf-edit-id").value;
+        const resultEl = document.getElementById("test-result");
+        if (!editId) {
+            resultEl.innerHTML = '<span class="text-error">Save the store first, then test.</span>';
+            return;
+        }
+        resultEl.innerHTML = '<span class="text-muted">Testing...</span>';
+        try {
+            const r = await api.post(`/api/settings/stores/${editId}/test`);
+            resultEl.innerHTML = r.success
+                ? '<span class="status-badge success">Connected</span>'
+                : `<span class="status-badge error">${r.message}</span>`;
+        } catch (err) {
+            resultEl.innerHTML = `<span class="status-badge error">${err.data?.message || err.message}</span>`;
+        }
+    });
+}
+
+window.editStore = function(id) {
+    const store = stores.find(s => s.id === id);
+    if (!store) return;
+    document.getElementById("sf-edit-id").value = id;
+    document.getElementById("store-form-title").textContent = `Edit: ${store.name}`;
+    document.getElementById("sf-name").value = store.name;
+    document.getElementById("sf-host").value = store.host;
+    document.getElementById("sf-port").value = store.port;
+    document.getElementById("sf-database").value = store.database_name;
+    document.getElementById("sf-username").value = store.username;
+    document.getElementById("sf-password").value = "";
+    document.getElementById("store-form").classList.remove("hidden");
+    document.getElementById("test-result").textContent = "";
+};
+
+window.testStoreConnection = async function(id, btn) {
+    const origHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span>';
+    try {
+        const r = await api.post(`/api/settings/stores/${id}/test`);
+        showToast(r.success ? "Connection OK" : `Failed: ${r.message}`, r.success ? "success" : "error");
+    } catch (err) {
+        showToast(`Error: ${err.data?.message || err.message}`, "error");
+    }
+    btn.innerHTML = origHtml;
+};
+
+// ── PRICE FORMULAS ──
+async function loadFormulas() {
+    try {
+        formulas = await api.get("/api/settings/price-formulas");
+        renderFormulas();
+    } catch { formulas = []; renderFormulas(); }
+}
+
+function renderFormulas() {
+    const el = document.getElementById("formulas-list");
+    if (!formulas.length) {
+        el.innerHTML = '<p class="text-sm text-muted" style="padding:var(--md-spacing-sm) 0;">No formulas configured. Prices will need manual entry.</p>';
+        return;
+    }
+    el.innerHTML = formulas.map((f, i) => buildFormulaRow(f, i)).join("");
+}
+
+function buildFormulaRow(f, index) {
+    const storeOptions = stores.map(s =>
+        `<option value="${s.id}" ${s.id == f.store_id ? 'selected' : ''}>${s.name}</option>`
+    ).join("");
+    const targets = ["UnitPrice","UnitPriceA","UnitPriceB","UnitPriceC","MSRPrice"];
+    const targetOptions = targets.map(t =>
+        `<option value="${t}" ${t === f.target_field ? 'selected' : ''}>${t}</option>`
+    ).join("");
+
+    return `
+        <div class="formula-row" data-index="${index}">
+            <select class="form-select" data-field="store_id">${storeOptions}</select>
+            <select class="form-select" data-field="target_field">${targetOptions}</select>
+            <select class="form-select" data-field="operator">
+                <option value="multiply" ${f.operator==='multiply'?'selected':''}>Multiply (x)</option>
+                <option value="add" ${f.operator==='add'?'selected':''}>Add (+)</option>
+                <option value="fixed" ${f.operator==='fixed'?'selected':''}>Fixed ($)</option>
+            </select>
+            <input type="number" step="0.0001" class="form-input" data-field="operand" value="${f.operand}">
+            <span class="text-sm text-muted">from UnitCost</span>
+            <button class="btn btn-icon btn-danger" onclick="removeFormula(${index})" style="padding:4px;">
+                <span class="material-icons-round" style="font-size:16px;">close</span>
+            </button>
+        </div>
+    `;
+}
+
+function bindFormulaEvents() {
+    document.getElementById("btn-add-formula").addEventListener("click", () => {
+        if (!stores.length) { showToast("Add a store first", "warning"); return; }
+        formulas.push({
+            store_id: stores[0].id,
+            target_field: "UnitPrice",
+            source_field: "UnitCost",
+            operator: "multiply",
+            operand: 1.0,
+        });
+        renderFormulas();
+    });
+
+    document.getElementById("btn-save-formulas").addEventListener("click", async () => {
+        const rows = document.querySelectorAll("#formulas-list .formula-row");
+        const data = Array.from(rows).map(row => ({
+            store_id: parseInt(row.querySelector('[data-field="store_id"]').value),
+            target_field: row.querySelector('[data-field="target_field"]').value,
+            source_field: "UnitCost",
+            operator: row.querySelector('[data-field="operator"]').value,
+            operand: parseFloat(row.querySelector('[data-field="operand"]').value) || 0,
+        }));
+        try {
+            await api.put("/api/settings/price-formulas", { formulas: data });
+            showToast("Price formulas saved", "success");
+            await loadFormulas();
+        } catch (err) {
+            showToast(`Error: ${err.message}`, "error");
+        }
+    });
+}
+
+function updateFormulaStoreOptions() {
+    document.querySelectorAll('#formulas-list select[data-field="store_id"]').forEach(sel => {
+        const current = sel.value;
+        sel.innerHTML = stores.map(s =>
+            `<option value="${s.id}" ${s.id == current ? 'selected' : ''}>${s.name}</option>`
+        ).join("");
+    });
+}
+
+window.removeFormula = function(index) {
+    formulas.splice(index, 1);
+    renderFormulas();
+};
+
+// ── FIELD CONFIGS ──
+async function loadFieldConfigs() {
+    try {
+        fieldConfigs = await api.get("/api/settings/field-configs");
+        renderFieldConfigs();
+    } catch { fieldConfigs = []; }
+}
+
+function renderFieldConfigs() {
+    const el = document.getElementById("fields-list");
+    el.innerHTML = fieldConfigs.map(fc => `
+        <div class="field-config-row" data-field="${fc.field_name}">
+            <span style="font-family:var(--md-font-family); font-weight:500;">${fc.field_name}</span>
+            <input type="text" class="form-input" data-cfg="display_name" value="${fc.display_name}" style="padding:4px 8px; font-size:0.8125rem;">
+            <span class="text-sm text-muted">${fc.section}</span>
+            <label class="toggle-switch">
+                <input type="checkbox" data-cfg="is_visible" ${fc.is_visible ? 'checked' : ''}>
+                <span class="slider"></span>
+            </label>
+            <label class="toggle-switch">
+                <input type="checkbox" data-cfg="is_required" ${fc.is_required ? 'checked' : ''}>
+                <span class="slider"></span>
+            </label>
+            <input type="text" class="form-input" data-cfg="default_value" value="${fc.default_value || ''}" placeholder="--" style="padding:4px 8px; font-size:0.8125rem;">
+        </div>
+    `).join("");
+}
+
+function bindFieldEvents() {
+    document.getElementById("btn-save-fields").addEventListener("click", async () => {
+        const rows = document.querySelectorAll("#fields-list .field-config-row");
+        const configs = Array.from(rows).map(row => ({
+            field_name: row.dataset.field,
+            display_name: row.querySelector('[data-cfg="display_name"]').value,
+            is_visible: row.querySelector('[data-cfg="is_visible"]').checked,
+            is_required: row.querySelector('[data-cfg="is_required"]').checked,
+            default_value: row.querySelector('[data-cfg="default_value"]').value || null,
+            sort_order: fieldConfigs.find(f => f.field_name === row.dataset.field)?.sort_order || 0,
+        }));
+        try {
+            await api.put("/api/settings/field-configs", { configs });
+            showToast("Field configuration saved", "success");
+            await loadFieldConfigs();
+        } catch (err) {
+            showToast(`Error: ${err.message}`, "error");
+        }
+    });
+}
+</script>
+{% endblock %}

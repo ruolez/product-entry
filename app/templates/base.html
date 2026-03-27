@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <title>{% block title %}Item Entry{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&family=Google+Sans+Text:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/forms.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="nav-brand">Item Entry</div>
+        <div class="nav-links">
+            <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">
+                <span class="material-icons-round">add_box</span>
+                New Item
+            </a>
+            <a href="/settings" class="nav-link {% if request.path == '/settings' %}active{% endif %}">
+                <span class="material-icons-round">settings</span>
+                Settings
+            </a>
+        </div>
+    </nav>
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+    <div id="toast-container"></div>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
