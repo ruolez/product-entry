@@ -284,7 +284,8 @@ let fieldConfigs = [];
 
 // ── Init ──
 document.addEventListener("DOMContentLoaded", async () => {
-    await Promise.all([loadStores(), loadFormulas(), loadFieldConfigs()]);
+    await loadStores();
+    await Promise.all([loadFormulas(), loadFieldConfigs()]);
     bindStoreEvents();
     bindFormulaEvents();
     bindFieldEvents();
