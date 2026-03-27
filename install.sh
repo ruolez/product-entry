@@ -70,7 +70,7 @@ get_status_info() {
 
     if [ -d "$INSTALL_DIR" ]; then
         status="STOPPED"
-        [ -f "${INSTALL_DIR}/.env" ] && ip=$(grep '^SERVER_IP=' "${INSTALL_DIR}/.env" 2>/dev/null | cut -d'=' -f2 || echo "N/A")
+        [ -f "${INSTALL_DIR}/.env" ] && ip=$(grep '^SERVER_IP=' "${INSTALL_DIR}/.env" 2>/dev/null | sed 's/^SERVER_IP=//' || echo "N/A")
         if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
             status="RUNNING"
             stores=$(cd "$INSTALL_DIR" && $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
@@ -571,15 +571,15 @@ do_update() {
     local current_ip=""
     local pg_pass="" fernet_key=""
     if [ -f ".env" ]; then
-        current_ip=$(grep '^SERVER_IP=' .env 2>/dev/null | cut -d'=' -f2)
-        pg_pass=$(grep '^POSTGRES_PASSWORD=' .env 2>/dev/null | cut -d'=' -f2)
-        fernet_key=$(grep '^FERNET_KEY=' .env 2>/dev/null | cut -d'=' -f2)
+        current_ip=$(grep '^SERVER_IP=' .env 2>/dev/null | sed 's/^SERVER_IP=//')
+        pg_pass=$(grep '^POSTGRES_PASSWORD=' .env 2>/dev/null | sed 's/^POSTGRES_PASSWORD=//')
+        fernet_key=$(grep '^FERNET_KEY=' .env 2>/dev/null | sed 's/^FERNET_KEY=//')
     fi
 
-    # Validate Fernet key - must be exactly 44 chars base64. Regenerate if invalid.
-    if [ -z "$fernet_key" ] || [ ${#fernet_key} -ne 44 ]; then
+    # Only generate a new Fernet key if none exists (should never happen on update)
+    if [ -z "$fernet_key" ]; then
         fernet_key=$(generate_fernet_key)
-        log "Fernet key was invalid, regenerated new key"
+        log "WARNING: No Fernet key found in .env, generated new key. Existing encrypted passwords will be lost."
     fi
 
     # Ask for IP (pre-filled with current)
