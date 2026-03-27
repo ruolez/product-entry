@@ -65,6 +65,13 @@
         justify-content: space-between;
     }
 
+    /* ── Inline pricing divider ── */
+    .inline-pricing {
+        margin-top: var(--md-spacing-md);
+        padding-top: var(--md-spacing-md);
+        border-top: 1px solid var(--md-outline-variant);
+    }
+
     /* ── Pricing: all fields in one flex flow ── */
     .pricing-fields {
         display: flex;
@@ -179,7 +186,6 @@
         font-size: 16px;
     }
     .section-badge.general { background: var(--md-primary-light); color: var(--md-primary); }
-    .section-badge.pricing { background: var(--md-success-light); color: var(--md-success); }
     .section-badge.inventory { background: var(--md-warning-light); color: #e37400; }
     .section-badge.extended { background: #f3e8fd; color: #8430ce; }
 
@@ -280,6 +286,102 @@
                             </div>
                         </div>
 
+                        <!-- Pricing inline (moved from separate section) -->
+                        <div class="inline-pricing" id="inline-pricing">
+                            <div class="pricing-fields" id="pricing-fields">
+                                <div class="form-group" id="cell-UnitCost">
+                                    <label>Unit Cost <span class="required-mark">*</span></label>
+                                    <div class="money-input-wrapper">
+                                        <span class="currency-symbol">$</span>
+                                        <input type="number" step="0.01" min="0" class="form-input" id="field-UnitCost" name="UnitCost" placeholder="0.00">
+                                    </div>
+                                    <div class="field-error" id="error-UnitCost"></div>
+                                </div>
+                                <div class="price-cell" id="cell-UnitPrice">
+                                    <div class="price-label">Standard Price <span class="required-mark">*</span></div>
+                                    <div class="money-input-wrapper">
+                                        <span class="currency-symbol">$</span>
+                                        <input type="number" step="0.01" min="0" class="form-input" id="field-UnitPrice" name="UnitPrice" placeholder="0.00">
+                                    </div>
+                                    <div class="margin-display" id="margin-UnitPrice">Margin: --</div>
+                                    <div class="field-error" id="error-UnitPrice"></div>
+                                </div>
+                                <div class="price-cell" id="cell-UnitPriceA">
+                                    <div class="price-label">Cash & Carry</div>
+                                    <div class="money-input-wrapper">
+                                        <span class="currency-symbol">$</span>
+                                        <input type="number" step="0.01" min="0" class="form-input" id="field-UnitPriceA" name="UnitPriceA" placeholder="0.00">
+                                    </div>
+                                    <div class="margin-display" id="margin-UnitPriceA">Margin: --</div>
+                                </div>
+                                <div class="price-cell" id="cell-UnitPriceB">
+                                    <div class="price-label">Delivery A</div>
+                                    <div class="money-input-wrapper">
+                                        <span class="currency-symbol">$</span>
+                                        <input type="number" step="0.01" min="0" class="form-input" id="field-UnitPriceB" name="UnitPriceB" placeholder="0.00">
+                                    </div>
+                                    <div class="margin-display" id="margin-UnitPriceB">Margin: --</div>
+                                </div>
+                                <div class="price-cell" id="cell-UnitPriceC">
+                                    <div class="price-label">Delivery B Price</div>
+                                    <div class="money-input-wrapper">
+                                        <span class="currency-symbol">$</span>
+                                        <input type="number" step="0.01" min="0" class="form-input" id="field-UnitPriceC" name="UnitPriceC" placeholder="0.00">
+                                    </div>
+                                    <div class="margin-display" id="margin-UnitPriceC">Margin: --</div>
+                                </div>
+                                <div class="form-group" id="cell-MSRPrice">
+                                    <label>MSRP</label>
+                                    <div class="money-input-wrapper">
+                                        <span class="currency-symbol">$</span>
+                                        <input type="number" step="0.01" min="0" class="form-input" id="field-MSRPrice" name="MSRPrice" placeholder="0.00" value="0.00">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Promotions sub-section -->
+                            <div class="promotions-subsection" id="promotions-subsection">
+                                <button class="subsection-toggle collapsed" id="promo-toggle" onclick="toggleSubsection('promo')">
+                                    <span class="material-icons-round">expand_more</span>
+                                    Promotions & Manufacturer Info
+                                </button>
+                                <div class="subsection-content collapsed" id="promo-content">
+                                    <div style="padding-top: var(--md-spacing-md);">
+                                        <div class="flex-row">
+                                            <div class="form-group">
+                                                <label>Preconfigured Promotion</label>
+                                                <select class="form-select" id="field-PromotionID" name="PromotionID">
+                                                    <option value="0">None</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-checkbox" style="padding-top: 18px;">
+                                                    <input type="checkbox" id="field-SPPromoted" name="SPPromoted">
+                                                    Manufacturer Promotion
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="flex-row">
+                                            <div class="form-group full">
+                                                <label>Manufacturer Promotion Description</label>
+                                                <input type="text" class="form-input" id="field-SPPromotionDescription" name="SPPromotionDescription" maxlength="50">
+                                            </div>
+                                        </div>
+                                        <div class="flex-row" style="margin-bottom:0;">
+                                            <div class="form-group">
+                                                <label>Promotion Code</label>
+                                                <input type="text" class="form-input" id="field-SPPromotionCode" name="SPPromotionCode" maxlength="20">
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Manufacturer Product ID</label>
+                                                <input type="text" class="form-input" id="field-ManuProductID" name="ManuProductID" maxlength="20">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="flex-row">
                             <div class="form-group">
                                 <label>Type</label>
@@ -328,112 +430,6 @@
                             <div class="form-group full">
                                 <label>Line Message</label>
                                 <textarea class="form-textarea" id="field-ProductMessage" name="ProductMessage" maxlength="96" rows="2" placeholder="Optional item message"></textarea>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ==================== PRICING ==================== -->
-        <div class="section" id="section-pricing" data-section="pricing">
-            <div class="section-header" onclick="toggleSection('section-pricing')">
-                <h2>
-                    <span class="section-badge pricing material-icons-round">payments</span>
-                    Pricing
-                </h2>
-                <span class="material-icons-round expand-icon">expand_more</span>
-            </div>
-            <div class="section-body">
-                <!-- All pricing in one flat flex row -->
-                <div class="pricing-fields" id="pricing-fields">
-                    <div class="form-group" id="cell-UnitCost">
-                        <label>Unit Cost <span class="required-mark">*</span></label>
-                        <div class="money-input-wrapper">
-                            <span class="currency-symbol">$</span>
-                            <input type="number" step="0.01" min="0" class="form-input" id="field-UnitCost" name="UnitCost" placeholder="0.00">
-                        </div>
-                        <div class="field-error" id="error-UnitCost"></div>
-                    </div>
-                    <div class="price-cell" id="cell-UnitPrice">
-                        <div class="price-label">Standard Price <span class="required-mark">*</span></div>
-                        <div class="money-input-wrapper">
-                            <span class="currency-symbol">$</span>
-                            <input type="number" step="0.01" min="0" class="form-input" id="field-UnitPrice" name="UnitPrice" placeholder="0.00">
-                        </div>
-                        <div class="margin-display" id="margin-UnitPrice">Margin: --</div>
-                        <div class="field-error" id="error-UnitPrice"></div>
-                    </div>
-                    <div class="price-cell" id="cell-UnitPriceA">
-                        <div class="price-label">Cash & Carry</div>
-                        <div class="money-input-wrapper">
-                            <span class="currency-symbol">$</span>
-                            <input type="number" step="0.01" min="0" class="form-input" id="field-UnitPriceA" name="UnitPriceA" placeholder="0.00">
-                        </div>
-                        <div class="margin-display" id="margin-UnitPriceA">Margin: --</div>
-                    </div>
-                    <div class="price-cell" id="cell-UnitPriceB">
-                        <div class="price-label">Delivery A</div>
-                        <div class="money-input-wrapper">
-                            <span class="currency-symbol">$</span>
-                            <input type="number" step="0.01" min="0" class="form-input" id="field-UnitPriceB" name="UnitPriceB" placeholder="0.00">
-                        </div>
-                        <div class="margin-display" id="margin-UnitPriceB">Margin: --</div>
-                    </div>
-                    <div class="price-cell" id="cell-UnitPriceC">
-                        <div class="price-label">Delivery B Price</div>
-                        <div class="money-input-wrapper">
-                            <span class="currency-symbol">$</span>
-                            <input type="number" step="0.01" min="0" class="form-input" id="field-UnitPriceC" name="UnitPriceC" placeholder="0.00">
-                        </div>
-                        <div class="margin-display" id="margin-UnitPriceC">Margin: --</div>
-                    </div>
-                    <div class="form-group" id="cell-MSRPrice">
-                        <label>MSRP</label>
-                        <div class="money-input-wrapper">
-                            <span class="currency-symbol">$</span>
-                            <input type="number" step="0.01" min="0" class="form-input" id="field-MSRPrice" name="MSRPrice" placeholder="0.00" value="0.00">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Promotions sub-section -->
-                <div class="promotions-subsection" id="promotions-subsection">
-                    <button class="subsection-toggle collapsed" id="promo-toggle" onclick="toggleSubsection('promo')">
-                        <span class="material-icons-round">expand_more</span>
-                        Promotions & Manufacturer Info
-                    </button>
-                    <div class="subsection-content collapsed" id="promo-content">
-                        <div style="padding-top: var(--md-spacing-md);">
-                            <div class="flex-row">
-                                <div class="form-group">
-                                    <label>Preconfigured Promotion</label>
-                                    <select class="form-select" id="field-PromotionID" name="PromotionID">
-                                        <option value="0">None</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-checkbox" style="padding-top: 18px;">
-                                        <input type="checkbox" id="field-SPPromoted" name="SPPromoted">
-                                        Manufacturer Promotion
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="flex-row">
-                                <div class="form-group full">
-                                    <label>Manufacturer Promotion Description</label>
-                                    <input type="text" class="form-input" id="field-SPPromotionDescription" name="SPPromotionDescription" maxlength="50">
-                                </div>
-                            </div>
-                            <div class="flex-row" style="margin-bottom:0;">
-                                <div class="form-group">
-                                    <label>Promotion Code</label>
-                                    <input type="text" class="form-input" id="field-SPPromotionCode" name="SPPromotionCode" maxlength="20">
-                                </div>
-                                <div class="form-group">
-                                    <label>Manufacturer Product ID</label>
-                                    <input type="text" class="form-input" id="field-ManuProductID" name="ManuProductID" maxlength="20">
-                                </div>
                             </div>
                         </div>
                     </div>

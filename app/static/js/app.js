@@ -667,8 +667,20 @@ function applyFieldVisibility(configs) {
     const unitSection = document.getElementById("unit-table-section");
     if (unitSection) unitSection.classList.toggle("hidden", !anyUnitVisible);
 
-    // Step 8: Hide entire sections if ALL their fields are hidden
-    ["general", "pricing", "inventory", "extended"].forEach(sectionName => {
+    // Step 8: Hide inline-pricing wrapper if all pricing fields hidden
+    const inlinePricing = document.getElementById("inline-pricing");
+    if (inlinePricing) {
+        const pricingFields = ["UnitCost", "UnitPrice", "UnitPriceA", "UnitPriceB", "UnitPriceC", "MSRPrice"];
+        const promoAllFields = [...pricingFields, ...["PromotionID", "SPPromoted", "SPPromotionDescription", "SPPromotionCode", "ManuProductID"]];
+        const anyPricingVisible = promoAllFields.some(f => {
+            const fc = configs.find(c => c.field_name === f);
+            return fc && fc.is_visible;
+        });
+        inlinePricing.classList.toggle("hidden", !anyPricingVisible);
+    }
+
+    // Step 9: Hide entire sections if ALL their fields are hidden
+    ["general", "inventory", "extended"].forEach(sectionName => {
         const sectionEl = document.querySelector(`[data-section="${sectionName}"]`);
         if (!sectionEl) return;
         const sectionFields = configs.filter(c => c.section === sectionName);
