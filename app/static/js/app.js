@@ -93,7 +93,7 @@ function updateToggleAllState() {
 
 async function onStoreSelectionChange() {
     state.selectedStoreIds = Array.from(
-        document.querySelectorAll(".store-chip.selected")
+        document.querySelectorAll(".store-chip.selected[data-store-id]")
     ).map(c => parseInt(c.dataset.storeId));
 
     const count = state.selectedStoreIds.length;
