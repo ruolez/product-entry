@@ -4,10 +4,32 @@
 
 {% block head %}
 <style>
-    /* Page-specific layout refinements */
     .entry-page { padding-bottom: 80px; }
 
-    /* General section split layout */
+    /* ── Adaptive flex rows (replace fixed grid) ── */
+    .flex-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--md-spacing-md);
+        margin-bottom: var(--md-spacing-md);
+    }
+    .flex-row > .form-group {
+        flex: 1 1 180px;
+        min-width: 150px;
+        max-width: 100%;
+    }
+    .flex-row > .form-group.wide {
+        flex: 2 1 300px;
+    }
+    .flex-row > .form-group.full {
+        flex: 1 1 100%;
+    }
+    /* Prevent single orphan field from stretching full width */
+    .flex-row > .form-group:only-child:not(.full) {
+        max-width: 300px;
+    }
+
+    /* ── General section split layout ── */
     .general-split {
         display: grid;
         grid-template-columns: 320px 1fr;
@@ -23,9 +45,7 @@
         border-radius: var(--md-radius-sm);
         padding: var(--md-spacing-md);
     }
-    .category-panel .store-tabs {
-        margin-bottom: var(--md-spacing-md);
-    }
+    .category-panel .store-tabs { margin-bottom: var(--md-spacing-md); }
     .category-panel-title {
         font-family: var(--md-font-family);
         font-size: 0.75rem;
@@ -39,14 +59,21 @@
         justify-content: space-between;
     }
 
-    /* Price grid */
+    /* ── Pricing section ── */
     .price-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr 1fr;
+        display: flex;
+        flex-wrap: wrap;
         gap: var(--md-spacing-md);
+        justify-content: center;
     }
     .price-grid .price-cell {
+        flex: 1 1 160px;
+        max-width: 240px;
         text-align: center;
+    }
+    /* When only 1-2 prices visible, don't stretch too wide */
+    .price-grid .price-cell:only-child {
+        max-width: 240px;
     }
     .price-grid .price-cell .price-label {
         font-family: var(--md-font-family);
@@ -57,17 +84,16 @@
         color: var(--md-on-surface-variant);
         margin-bottom: var(--md-spacing-xs);
     }
-    @media (max-width: 640px) {
-        .price-grid { grid-template-columns: 1fr 1fr; }
-    }
 
-    /* Cost row */
     .cost-row {
-        display: grid;
-        grid-template-columns: 200px 1fr;
+        display: flex;
+        flex-wrap: wrap;
         gap: var(--md-spacing-lg);
         align-items: end;
         margin-bottom: var(--md-spacing-lg);
+    }
+    .cost-row > .form-group {
+        flex: 0 0 200px;
     }
     .cost-arrow {
         display: flex;
@@ -82,12 +108,8 @@
         font-size: 20px;
         color: var(--md-primary);
     }
-    @media (max-width: 640px) {
-        .cost-row { grid-template-columns: 1fr; }
-        .cost-arrow { display: none; }
-    }
 
-    /* Promotions sub-section */
+    /* ── Promotions sub-section ── */
     .promotions-subsection {
         margin-top: var(--md-spacing-lg);
         padding-top: var(--md-spacing-md);
@@ -125,15 +147,14 @@
         opacity: 0;
     }
 
-    /* Unit conversion table */
-    .unit-table-wrap {
-        overflow-x: auto;
+    /* ── Unit conversion table ── */
+    .unit-table-section {
         margin-top: var(--md-spacing-md);
+        padding-top: var(--md-spacing-md);
+        border-top: 1px solid var(--md-outline-variant);
     }
-    .unit-table {
-        width: 100%;
-        border-collapse: collapse;
-    }
+    .unit-table-wrap { overflow-x: auto; margin-top: var(--md-spacing-md); }
+    .unit-table { width: 100%; border-collapse: collapse; }
     .unit-table th {
         font-family: var(--md-font-family);
         font-size: 0.7rem;
@@ -141,7 +162,7 @@
         text-transform: uppercase;
         letter-spacing: 0.04em;
         color: var(--md-on-surface-variant);
-        padding: var(--md-spacing-sm) var(--md-spacing-sm);
+        padding: var(--md-spacing-sm);
         text-align: left;
         border-bottom: 2px solid var(--md-outline);
         white-space: nowrap;
@@ -150,20 +171,11 @@
         padding: var(--md-spacing-xs) var(--md-spacing-sm);
         vertical-align: middle;
     }
-    .unit-table .form-input,
-    .unit-table .form-select {
-        padding: 6px 8px;
-        font-size: 0.8125rem;
-        min-width: 70px;
+    .unit-table .form-input, .unit-table .form-select {
+        padding: 6px 8px; font-size: 0.8125rem; min-width: 70px;
     }
-    .unit-table .money-input-wrapper .form-input {
-        padding-left: 20px;
-        min-width: 90px;
-    }
-    .unit-table .money-input-wrapper .currency-symbol {
-        left: 8px;
-        font-size: 0.8125rem;
-    }
+    .unit-table .money-input-wrapper .form-input { padding-left: 20px; min-width: 90px; }
+    .unit-table .money-input-wrapper .currency-symbol { left: 8px; font-size: 0.8125rem; }
     .unit-row-label {
         font-family: var(--md-font-family);
         font-size: 0.75rem;
@@ -172,13 +184,12 @@
         white-space: nowrap;
     }
 
-    /* Section icon badges */
+    /* ── Section badges ── */
     .section-badge {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 28px;
-        height: 28px;
+        width: 28px; height: 28px;
         border-radius: var(--md-radius-sm);
         font-size: 16px;
     }
@@ -187,7 +198,6 @@
     .section-badge.inventory { background: var(--md-warning-light); color: #e37400; }
     .section-badge.extended { background: #f3e8fd; color: #8430ce; }
 
-    /* Shortcut hint */
     .shortcut-hint {
         font-size: 0.65rem;
         color: var(--md-on-surface-variant);
@@ -196,22 +206,6 @@
         border-radius: 3px;
         font-family: monospace;
         margin-left: var(--md-spacing-sm);
-    }
-
-    /* Empty state */
-    .no-stores-banner {
-        display: flex;
-        align-items: center;
-        gap: var(--md-spacing-md);
-        padding: var(--md-spacing-xl);
-        background: var(--md-warning-light);
-        border: 1px solid var(--md-warning);
-        border-radius: var(--md-radius-md);
-        margin-bottom: var(--md-spacing-lg);
-    }
-    .no-stores-banner .material-icons-round {
-        font-size: 32px;
-        color: #e37400;
     }
 </style>
 {% endblock %}
@@ -228,11 +222,10 @@
         <span class="text-muted">Loading stores...</span>
     </div>
 
-    <!-- Form Sections Container -->
     <div id="form-sections">
 
         <!-- ==================== GENERAL ==================== -->
-        <div class="section" id="section-general">
+        <div class="section" id="section-general" data-section="general">
             <div class="section-header" onclick="toggleSection('section-general')">
                 <h2>
                     <span class="section-badge general material-icons-round">inventory_2</span>
@@ -243,12 +236,10 @@
             <div class="section-body">
                 <div class="general-split">
                     <!-- Left: Categories (per-store) -->
-                    <div class="category-panel">
+                    <div class="category-panel" id="category-panel">
                         <div class="category-panel-title">
                             <span>Categories</span>
-                            <button class="apply-all-btn" id="apply-cats-all" title="Copy current category selection to all stores">
-                                Apply to All
-                            </button>
+                            <button class="apply-all-btn" id="apply-cats-all" title="Copy current category selection to all stores">Apply to All</button>
                         </div>
                         <div class="store-tabs" id="category-store-tabs">
                             <span class="text-muted text-sm">Select stores above</span>
@@ -271,7 +262,7 @@
 
                     <!-- Right: Product identifiers & metadata -->
                     <div>
-                        <div class="form-row cols-2" style="margin-bottom: var(--md-spacing-md);">
+                        <div class="flex-row">
                             <div class="form-group">
                                 <label>UPC <span class="required-mark">*</span></label>
                                 <div class="input-with-status">
@@ -290,13 +281,15 @@
                             </div>
                         </div>
 
-                        <div class="form-group" style="margin-bottom: var(--md-spacing-md);">
-                            <label>Description <span class="required-mark">*</span></label>
-                            <input type="text" class="form-input" id="field-ProductDescription" name="ProductDescription" maxlength="50" placeholder="Product description">
-                            <div class="field-error" id="error-ProductDescription"></div>
+                        <div class="flex-row">
+                            <div class="form-group full">
+                                <label>Description <span class="required-mark">*</span></label>
+                                <input type="text" class="form-input" id="field-ProductDescription" name="ProductDescription" maxlength="50" placeholder="Product description">
+                                <div class="field-error" id="error-ProductDescription"></div>
+                            </div>
                         </div>
 
-                        <div class="form-row cols-3" style="margin-bottom: var(--md-spacing-md);">
+                        <div class="flex-row">
                             <div class="form-group">
                                 <label>Type</label>
                                 <select class="form-select" id="field-ProductType" name="ProductType">
@@ -320,7 +313,7 @@
                             </div>
                         </div>
 
-                        <div class="form-row cols-3" style="margin-bottom: var(--md-spacing-md);">
+                        <div class="flex-row">
                             <div class="form-group">
                                 <label>Exp. Date</label>
                                 <input type="date" class="form-input" id="field-ExpDate" name="ExpDate">
@@ -340,9 +333,11 @@
                             </div>
                         </div>
 
-                        <div class="form-group">
-                            <label>Line Message</label>
-                            <textarea class="form-textarea" id="field-ProductMessage" name="ProductMessage" maxlength="96" rows="2" placeholder="Optional item message"></textarea>
+                        <div class="flex-row" style="margin-bottom:0;">
+                            <div class="form-group full">
+                                <label>Line Message</label>
+                                <textarea class="form-textarea" id="field-ProductMessage" name="ProductMessage" maxlength="96" rows="2" placeholder="Optional item message"></textarea>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -350,7 +345,7 @@
         </div>
 
         <!-- ==================== PRICING ==================== -->
-        <div class="section" id="section-pricing">
+        <div class="section" id="section-pricing" data-section="pricing">
             <div class="section-header" onclick="toggleSection('section-pricing')">
                 <h2>
                     <span class="section-badge pricing material-icons-round">payments</span>
@@ -359,8 +354,7 @@
                 <span class="material-icons-round expand-icon">expand_more</span>
             </div>
             <div class="section-body">
-                <!-- Cost -> Price calculation -->
-                <div class="cost-row">
+                <div class="cost-row" id="cost-row">
                     <div class="form-group">
                         <label>Unit Cost <span class="required-mark">*</span></label>
                         <div class="money-input-wrapper">
@@ -369,15 +363,14 @@
                         </div>
                         <div class="field-error" id="error-UnitCost"></div>
                     </div>
-                    <div class="cost-arrow">
+                    <div class="cost-arrow" id="cost-arrow">
                         <span class="material-icons-round">trending_flat</span>
                         Auto-calculates prices from configured formulas
                     </div>
                 </div>
 
-                <!-- 4-column price grid -->
-                <div class="price-grid">
-                    <div class="price-cell">
+                <div class="price-grid" id="price-grid">
+                    <div class="price-cell" id="cell-UnitPrice">
                         <div class="price-label">Standard Price <span class="required-mark">*</span></div>
                         <div class="money-input-wrapper">
                             <span class="currency-symbol">$</span>
@@ -386,7 +379,7 @@
                         <div class="margin-display" id="margin-UnitPrice">Margin: --</div>
                         <div class="field-error" id="error-UnitPrice"></div>
                     </div>
-                    <div class="price-cell">
+                    <div class="price-cell" id="cell-UnitPriceA">
                         <div class="price-label">Cash & Carry</div>
                         <div class="money-input-wrapper">
                             <span class="currency-symbol">$</span>
@@ -394,7 +387,7 @@
                         </div>
                         <div class="margin-display" id="margin-UnitPriceA">Margin: --</div>
                     </div>
-                    <div class="price-cell">
+                    <div class="price-cell" id="cell-UnitPriceB">
                         <div class="price-label">Delivery A</div>
                         <div class="money-input-wrapper">
                             <span class="currency-symbol">$</span>
@@ -402,7 +395,7 @@
                         </div>
                         <div class="margin-display" id="margin-UnitPriceB">Margin: --</div>
                     </div>
-                    <div class="price-cell">
+                    <div class="price-cell" id="cell-UnitPriceC">
                         <div class="price-label">Delivery B</div>
                         <div class="money-input-wrapper">
                             <span class="currency-symbol">$</span>
@@ -412,7 +405,7 @@
                     </div>
                 </div>
 
-                <div class="form-row cols-2" style="margin-top: var(--md-spacing-md);">
+                <div class="flex-row" id="msrp-row" style="margin-top: var(--md-spacing-md);">
                     <div class="form-group">
                         <label>MSRP</label>
                         <div class="money-input-wrapper">
@@ -420,18 +413,17 @@
                             <input type="number" step="0.01" min="0" class="form-input" id="field-MSRPrice" name="MSRPrice" placeholder="0.00" value="0.00">
                         </div>
                     </div>
-                    <div></div>
                 </div>
 
                 <!-- Promotions sub-section -->
-                <div class="promotions-subsection">
+                <div class="promotions-subsection" id="promotions-subsection">
                     <button class="subsection-toggle collapsed" id="promo-toggle" onclick="toggleSubsection('promo')">
                         <span class="material-icons-round">expand_more</span>
                         Promotions & Manufacturer Info
                     </button>
                     <div class="subsection-content collapsed" id="promo-content">
                         <div style="padding-top: var(--md-spacing-md);">
-                            <div class="form-row cols-2" style="margin-bottom: var(--md-spacing-md);">
+                            <div class="flex-row">
                                 <div class="form-group">
                                     <label>Preconfigured Promotion</label>
                                     <select class="form-select" id="field-PromotionID" name="PromotionID">
@@ -445,11 +437,13 @@
                                     </label>
                                 </div>
                             </div>
-                            <div class="form-group" style="margin-bottom: var(--md-spacing-md);">
-                                <label>Manufacturer Promotion Description</label>
-                                <input type="text" class="form-input" id="field-SPPromotionDescription" name="SPPromotionDescription" maxlength="50">
+                            <div class="flex-row">
+                                <div class="form-group full">
+                                    <label>Manufacturer Promotion Description</label>
+                                    <input type="text" class="form-input" id="field-SPPromotionDescription" name="SPPromotionDescription" maxlength="50">
+                                </div>
                             </div>
-                            <div class="form-row cols-3">
+                            <div class="flex-row" style="margin-bottom:0;">
                                 <div class="form-group">
                                     <label>Promotion Code</label>
                                     <input type="text" class="form-input" id="field-SPPromotionCode" name="SPPromotionCode" maxlength="20">
@@ -458,7 +452,6 @@
                                     <label>Manufacturer Product ID</label>
                                     <input type="text" class="form-input" id="field-ManuProductID" name="ManuProductID" maxlength="20">
                                 </div>
-                                <div></div>
                             </div>
                         </div>
                     </div>
@@ -467,7 +460,7 @@
         </div>
 
         <!-- ==================== INVENTORY ==================== -->
-        <div class="section collapsed" id="section-inventory">
+        <div class="section collapsed" id="section-inventory" data-section="inventory">
             <div class="section-header" onclick="toggleSection('section-inventory')">
                 <h2>
                     <span class="section-badge inventory material-icons-round">warehouse</span>
@@ -476,7 +469,7 @@
                 <span class="material-icons-round expand-icon">expand_more</span>
             </div>
             <div class="section-body">
-                <div class="form-row cols-4" style="margin-bottom: var(--md-spacing-md);">
+                <div class="flex-row">
                     <div class="form-group">
                         <label>On Hand</label>
                         <input type="number" class="form-input" id="field-QuantOnHand" name="QuantOnHand" value="0">
@@ -495,7 +488,7 @@
                     </div>
                 </div>
 
-                <div class="form-row cols-3" style="margin-bottom: var(--md-spacing-md);">
+                <div class="flex-row">
                     <div class="form-group">
                         <label>Manufacturer</label>
                         <select class="form-select" id="field-ManuID" name="ManuID">
@@ -514,7 +507,7 @@
                     </div>
                 </div>
 
-                <div class="form-row cols-4" style="margin-bottom: var(--md-spacing-md);">
+                <div class="flex-row">
                     <div class="form-group">
                         <label>Base Unit</label>
                         <select class="form-select" id="field-UnitID" name="UnitID">
@@ -529,126 +522,43 @@
                         <label>Weight</label>
                         <input type="text" class="form-input" id="field-ItemWeight" name="ItemWeight" maxlength="10" placeholder="e.g. 6">
                     </div>
-                    <div></div>
                 </div>
 
                 <!-- Units of Measure Conversion Table -->
-                <div style="margin-top: var(--md-spacing-md); padding-top: var(--md-spacing-md); border-top: 1px solid var(--md-outline-variant);">
-                    <div class="category-panel-title" style="margin-bottom: var(--md-spacing-sm);">
-                        <span>Units of Measure</span>
-                    </div>
+                <div class="unit-table-section" id="unit-table-section">
+                    <div class="category-panel-title"><span>Units of Measure</span></div>
                     <div class="unit-table-wrap">
                         <table class="unit-table">
-                            <thead>
-                                <tr>
-                                    <th style="width:40px;"></th>
-                                    <th>Unit</th>
-                                    <th>Count</th>
-                                    <th>Price</th>
-                                    <th>Cash & Carry</th>
-                                    <th>Delivery A</th>
-                                    <th>Delivery B</th>
-                                </tr>
-                            </thead>
+                            <thead><tr>
+                                <th style="width:40px;"></th><th>Unit</th><th>Count</th><th>Price</th><th>Cash & Carry</th><th>Delivery A</th><th>Delivery B</th>
+                            </tr></thead>
                             <tbody>
-                                <tr>
+                                <tr id="unit-row-2">
                                     <td class="unit-row-label">U2</td>
-                                    <td>
-                                        <select class="form-select" id="field-UnitID2" name="UnitID2">
-                                            <option value="0">-- None --</option>
-                                        </select>
-                                    </td>
+                                    <td><select class="form-select" id="field-UnitID2" name="UnitID2"><option value="0">-- None --</option></select></td>
                                     <td><input type="number" class="form-input" id="field-UnitQty2" name="UnitQty2" value="0"></td>
-                                    <td>
-                                        <div class="money-input-wrapper">
-                                            <span class="currency-symbol">$</span>
-                                            <input type="number" step="0.01" class="form-input" id="field-UnitPrice2" name="UnitPrice2" value="0.00">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="money-input-wrapper">
-                                            <span class="currency-symbol">$</span>
-                                            <input type="number" step="0.01" class="form-input" id="field-UnitPriceA2" name="UnitPriceA2" value="0.00">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="money-input-wrapper">
-                                            <span class="currency-symbol">$</span>
-                                            <input type="number" step="0.01" class="form-input" id="field-UnitPriceB2" name="UnitPriceB2" value="0.00">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="money-input-wrapper">
-                                            <span class="currency-symbol">$</span>
-                                            <input type="number" step="0.01" class="form-input" id="field-UnitPriceC2" name="UnitPriceC2" value="0.00">
-                                        </div>
-                                    </td>
+                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPrice2" name="UnitPrice2" value="0.00"></div></td>
+                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceA2" name="UnitPriceA2" value="0.00"></div></td>
+                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceB2" name="UnitPriceB2" value="0.00"></div></td>
+                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceC2" name="UnitPriceC2" value="0.00"></div></td>
                                 </tr>
-                                <tr>
+                                <tr id="unit-row-3">
                                     <td class="unit-row-label">U3</td>
-                                    <td>
-                                        <select class="form-select" id="field-UnitID3" name="UnitID3">
-                                            <option value="0">-- None --</option>
-                                        </select>
-                                    </td>
+                                    <td><select class="form-select" id="field-UnitID3" name="UnitID3"><option value="0">-- None --</option></select></td>
                                     <td><input type="number" class="form-input" id="field-UnitQty3" name="UnitQty3" value="0"></td>
-                                    <td>
-                                        <div class="money-input-wrapper">
-                                            <span class="currency-symbol">$</span>
-                                            <input type="number" step="0.01" class="form-input" id="field-UnitPrice3" name="UnitPrice3" value="0.00">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="money-input-wrapper">
-                                            <span class="currency-symbol">$</span>
-                                            <input type="number" step="0.01" class="form-input" id="field-UnitPriceA3" name="UnitPriceA3" value="0.00">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="money-input-wrapper">
-                                            <span class="currency-symbol">$</span>
-                                            <input type="number" step="0.01" class="form-input" id="field-UnitPriceB3" name="UnitPriceB3" value="0.00">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="money-input-wrapper">
-                                            <span class="currency-symbol">$</span>
-                                            <input type="number" step="0.01" class="form-input" id="field-UnitPriceC3" name="UnitPriceC3" value="0.00">
-                                        </div>
-                                    </td>
+                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPrice3" name="UnitPrice3" value="0.00"></div></td>
+                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceA3" name="UnitPriceA3" value="0.00"></div></td>
+                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceB3" name="UnitPriceB3" value="0.00"></div></td>
+                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceC3" name="UnitPriceC3" value="0.00"></div></td>
                                 </tr>
-                                <tr>
+                                <tr id="unit-row-4">
                                     <td class="unit-row-label">U4</td>
-                                    <td>
-                                        <select class="form-select" id="field-UnitID4" name="UnitID4">
-                                            <option value="0">-- None --</option>
-                                        </select>
-                                    </td>
+                                    <td><select class="form-select" id="field-UnitID4" name="UnitID4"><option value="0">-- None --</option></select></td>
                                     <td><input type="number" class="form-input" id="field-UnitQty4" name="UnitQty4" value="0"></td>
-                                    <td>
-                                        <div class="money-input-wrapper">
-                                            <span class="currency-symbol">$</span>
-                                            <input type="number" step="0.01" class="form-input" id="field-UnitPrice4" name="UnitPrice4" value="0.00">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="money-input-wrapper">
-                                            <span class="currency-symbol">$</span>
-                                            <input type="number" step="0.01" class="form-input" id="field-UnitPriceA4" name="UnitPriceA4" value="0.00">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="money-input-wrapper">
-                                            <span class="currency-symbol">$</span>
-                                            <input type="number" step="0.01" class="form-input" id="field-UnitPriceB4" name="UnitPriceB4" value="0.00">
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="money-input-wrapper">
-                                            <span class="currency-symbol">$</span>
-                                            <input type="number" step="0.01" class="form-input" id="field-UnitPriceC4" name="UnitPriceC4" value="0.00">
-                                        </div>
-                                    </td>
+                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPrice4" name="UnitPrice4" value="0.00"></div></td>
+                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceA4" name="UnitPriceA4" value="0.00"></div></td>
+                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceB4" name="UnitPriceB4" value="0.00"></div></td>
+                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceC4" name="UnitPriceC4" value="0.00"></div></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -658,7 +568,7 @@
         </div>
 
         <!-- ==================== EXTENDED ==================== -->
-        <div class="section collapsed" id="section-extended">
+        <div class="section collapsed" id="section-extended" data-section="extended">
             <div class="section-header" onclick="toggleSection('section-extended')">
                 <h2>
                     <span class="section-badge extended material-icons-round">description</span>
@@ -667,18 +577,22 @@
                 <span class="material-icons-round expand-icon">expand_more</span>
             </div>
             <div class="section-body">
-                <div class="form-group" style="margin-bottom: var(--md-spacing-md);">
-                    <label>Extended Description</label>
-                    <textarea class="form-textarea" id="field-ExtDescription" name="ExtDescription" rows="4" placeholder="Detailed product description..."></textarea>
+                <div class="flex-row">
+                    <div class="form-group full">
+                        <label>Extended Description</label>
+                        <textarea class="form-textarea" id="field-ExtDescription" name="ExtDescription" rows="4" placeholder="Detailed product description..."></textarea>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Notes</label>
-                    <textarea class="form-textarea" id="field-Notes" name="Notes" maxlength="500" rows="3" placeholder="Internal notes..."></textarea>
+                <div class="flex-row" style="margin-bottom:0;">
+                    <div class="form-group full">
+                        <label>Notes</label>
+                        <textarea class="form-textarea" id="field-Notes" name="Notes" maxlength="500" rows="3" placeholder="Internal notes..."></textarea>
+                    </div>
                 </div>
             </div>
         </div>
 
-    </div><!-- /form-sections -->
+    </div>
 
     <!-- Sticky Action Bar -->
     <div class="action-bar" id="action-bar">
@@ -686,20 +600,16 @@
             <span class="text-sm text-muted" id="store-count-label">No stores selected</span>
         </div>
         <button class="btn btn-secondary" id="btn-clear" title="Clear all form fields">
-            <span class="material-icons-round">clear_all</span>
-            Clear
+            <span class="material-icons-round">clear_all</span> Clear
         </button>
         <button class="btn btn-secondary" id="btn-save-new" disabled title="Save and start new entry (Ctrl+Shift+S)">
-            <span class="material-icons-round">add_circle_outline</span>
-            Save & New
+            <span class="material-icons-round">add_circle_outline</span> Save & New
         </button>
         <button class="btn btn-primary" id="btn-save" disabled title="Save to selected stores (Ctrl+S)">
-            <span class="material-icons-round">save</span>
-            Save to Stores
+            <span class="material-icons-round">save</span> Save to Stores
             <span class="shortcut-hint">Ctrl+S</span>
         </button>
     </div>
-
 </div>
 {% endblock %}
 

@@ -570,14 +570,14 @@ function applyFieldDefaults(configs) {
 }
 
 function applyFieldVisibility(configs) {
+    // Step 1: Show/hide each field's direct container
     configs.forEach(fc => {
         const el = document.getElementById(`field-${fc.field_name}`);
         if (!el) return;
 
-        // Walk up to the closest .form-group, table row, or grid cell
-        const container = el.closest(".form-group")
+        const container = el.closest(".price-cell")
+            || el.closest(".form-group")
             || el.closest("tr")
-            || el.closest(".price-cell")
             || el.parentElement;
         if (!container) return;
 
@@ -586,6 +586,69 @@ function applyFieldVisibility(configs) {
         } else {
             container.classList.add("hidden");
         }
+    });
+
+    // Step 2: Hide empty flex-rows (all children hidden)
+    document.querySelectorAll("#form-sections .flex-row").forEach(row => {
+        const hasVisible = Array.from(row.children).some(
+            c => !c.classList.contains("hidden")
+        );
+        row.classList.toggle("hidden", !hasVisible);
+    });
+
+    // Step 3: Hide cost-arrow if no price formulas are relevant (only cost+price visible)
+    const costArrow = document.getElementById("cost-arrow");
+    if (costArrow) {
+        const anyFormulaTarget = ["UnitPriceA", "UnitPriceB", "UnitPriceC"].some(f => {
+            const fc = configs.find(c => c.field_name === f);
+            return fc && fc.is_visible;
+        });
+        costArrow.classList.toggle("hidden", !anyFormulaTarget);
+    }
+
+    // Step 4: Hide price-grid if no price cells visible
+    const priceGrid = document.getElementById("price-grid");
+    if (priceGrid) {
+        const hasVisiblePrice = Array.from(priceGrid.children).some(
+            c => !c.classList.contains("hidden")
+        );
+        priceGrid.classList.toggle("hidden", !hasVisiblePrice);
+    }
+
+    // Step 5: Hide MSRP row
+    const msrpRow = document.getElementById("msrp-row");
+    if (msrpRow) {
+        const msrpCfg = configs.find(c => c.field_name === "MSRPrice");
+        msrpRow.classList.toggle("hidden", msrpCfg && !msrpCfg.is_visible);
+    }
+
+    // Step 6: Hide promotions subsection if all promo fields hidden
+    const promoFields = ["PromotionID", "SPPromoted", "SPPromotionDescription", "SPPromotionCode", "ManuProductID"];
+    const anyPromoVisible = promoFields.some(f => {
+        const fc = configs.find(c => c.field_name === f);
+        return fc && fc.is_visible;
+    });
+    const promoSection = document.getElementById("promotions-subsection");
+    if (promoSection) promoSection.classList.toggle("hidden", !anyPromoVisible);
+
+    // Step 7: Hide unit conversion table if all unit2/3/4 fields hidden
+    const unitFields = ["UnitID2", "UnitQty2", "UnitPrice2", "UnitID3", "UnitQty3", "UnitPrice3", "UnitID4", "UnitQty4", "UnitPrice4"];
+    const anyUnitVisible = unitFields.some(f => {
+        const fc = configs.find(c => c.field_name === f);
+        return fc && fc.is_visible;
+    });
+    const unitSection = document.getElementById("unit-table-section");
+    if (unitSection) unitSection.classList.toggle("hidden", !anyUnitVisible);
+
+    // Step 8: Hide entire sections if ALL their fields are hidden
+    ["general", "pricing", "inventory", "extended"].forEach(sectionName => {
+        const sectionEl = document.querySelector(`[data-section="${sectionName}"]`);
+        if (!sectionEl) return;
+        const sectionFields = configs.filter(c => c.section === sectionName);
+        const anyVisible = sectionFields.some(c => c.is_visible);
+        // For general section, categories are always shown (per-store), so don't hide
+        if (sectionName === "general") return;
+        sectionEl.classList.toggle("hidden", !anyVisible);
     });
 }
 
