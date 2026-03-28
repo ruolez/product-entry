@@ -24,31 +24,29 @@ WT_HEIGHT=20
 WT_WIDTH=70
 WT_MENU_HEIGHT=10
 
-# Neutral blue/gray color scheme (replaces default pink)
+# Clean blue color scheme
 export NEWT_COLORS='
-  root=,blue
-  window=white,gray
-  border=white,gray
-  shadow=,black
-  title=white,gray
-  button=black,lightgray
-  actbutton=white,blue
-  compactbutton=black,lightgray
-  checkbox=black,lightgray
-  actcheckbox=white,blue
-  entry=black,white
-  disentry=gray,lightgray
-  label=black,gray
-  listbox=black,lightgray
-  actlistbox=white,blue
-  sellistbox=black,lightgray
-  actsellistbox=white,blue
-  textbox=black,lightgray
-  acttextbox=white,blue
-  helpline=,gray
-  roottext=lightgray,blue
-  emptyscale=,gray
-  fullscale=,blue
+root=,blue
+window=,lightgray
+border=blue,lightgray
+shadow=,black
+title=blue,lightgray
+button=white,blue
+actbutton=lightgray,blue
+checkbox=black,lightgray
+actcheckbox=blue,lightgray
+entry=black,white
+label=black,lightgray
+listbox=black,lightgray
+actlistbox=white,blue
+sellistbox=blue,lightgray
+actsellistbox=white,blue
+textbox=black,lightgray
+acttextbox=black,lightgray
+helpline=blue,lightgray
+roottext=white,blue
+emptyscale=,lightgray
+fullscale=,blue
 '
 
 # ── Root check ──────────────────────────────────────────
@@ -142,6 +140,15 @@ run_with_progress() {
     echo "Complete!"
     echo "XXX"
     return 0
+}
+
+# ── Gauge helper (multi-line progress text) ─────────────
+gauge_msg() {
+    local pct="$1"; shift
+    echo "$pct"
+    echo "XXX"
+    for line in "$@"; do echo "$line"; done
+    echo "XXX"
 }
 
 # ════════════════════════════════════════════════════════
@@ -364,16 +371,6 @@ Proceed with installation?" \
     local pg_pass fernet_key
     pg_pass=$(generate_password)
     fernet_key=$(generate_fernet_key)
-
-    # Helper: update gauge with multi-line detail
-    # Usage: gauge_msg PERCENT "Line 1" "Line 2" "Line 3"
-    gauge_msg() {
-        local pct="$1"; shift
-        echo "$pct"
-        echo "XXX"
-        for line in "$@"; do echo "$line"; done
-        echo "XXX"
-    }
 
     {
         gauge_msg 0 \
