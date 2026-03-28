@@ -359,17 +359,49 @@ document.getElementById("field-ManuID")?.addEventListener("change", (e) => {
 });
 
 // Apply to All
-document.getElementById("apply-cats-all")?.addEventListener("click", () => {
-    const source = state.perStoreData[state.activeCategoryStoreId];
-    if (!source?.CateID) {
+document.getElementById("apply-cats-all")?.addEventListener("click", async () => {
+    const sourceStoreId = state.activeCategoryStoreId;
+    const source = state.perStoreData[sourceStoreId];
+    if (!source?._subName) {
         showToast("Select a subcategory first", "warning");
         return;
     }
-    state.selectedStoreIds.forEach(sid => {
-        state.perStoreData[sid] = { ...source };
-    });
+
+    const subName = source._subName;
+    const nameLower = subName.toLowerCase();
+
+    // Match by NAME in each store (not by ID copy)
+    const storesToMatch = state.selectedStoreIds.filter(sid => sid !== sourceStoreId);
+    const results = await Promise.all(
+        storesToMatch.map(async (sid) => {
+            const allSubs = await getCachedLookup("all-subcategories", sid);
+            return { sid, allSubs };
+        })
+    );
+
+    let matched = 0;
+    let notFound = [];
+    for (const { sid, allSubs } of results) {
+        const match = allSubs.find(s => s.SubCateName.toLowerCase() === nameLower);
+        if (match) {
+            if (!state.perStoreData[sid]) state.perStoreData[sid] = {};
+            state.perStoreData[sid].CateID = match.CategoryID;
+            state.perStoreData[sid].SubCateID = match.SubCateID;
+            state.perStoreData[sid]._catName = match.CategoryName;
+            state.perStoreData[sid]._subName = match.SubCateName;
+            matched++;
+        } else {
+            const store = state.stores.find(s => s.id === sid);
+            notFound.push(store?.name || sid);
+        }
+    }
+
     renderCategoryTabs();
-    showToast("Applied to all stores", "success");
+    if (notFound.length > 0) {
+        showToast(`Matched ${matched} store${matched !== 1 ? "s" : ""}. Not found in: ${notFound.join(", ")}`, "warning");
+    } else {
+        showToast(`"${subName}" matched in all ${matched} stores`, "success");
+    }
 });
 
 // Breadcrumb clear
