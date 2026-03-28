@@ -40,32 +40,27 @@ def get_formulas_for_stores(store_ids):
 
 
 def calculate_prices(fields, store_id):
-    """Apply price formulas for a store.
+    """Apply ALL price formulas for a store. Server-side is authoritative.
 
-    The user enters a BASE cost in UnitCost. Formulas can:
-    - Adjust UnitCost per store (e.g., UnitCost = UnitCost × 1.05)
-    - Calculate prices from UnitCost (e.g., UnitPrice = UnitCost × 1.20)
-    - Chain: first adjust cost, then prices use the adjusted cost
+    The user enters a BASE cost in UnitCost. Formulas execute in order:
+    1. UnitCost = UnitCost × 1.05  (per-store cost adjustment)
+    2. UnitPrice = UnitCost × 1.20 (now uses adjusted 105, not base 100)
+    3. UnitPriceC = UnitCost × 1.05 (also uses adjusted cost)
 
-    Formulas targeting UnitCost ALWAYS override the base cost (that's
-    their purpose - per-store cost adjustment). Other targets only fill
-    in if not already set by the user.
+    ALL configured formulas are applied unconditionally. The client-side
+    only shows preview values from the base cost; the server recalculates
+    everything with per-store adjustments and chaining.
     """
     formulas = get_formulas_for_store(store_id)
-    # Start with a copy of fields so we can chain (adjusted cost -> prices)
+    if not formulas:
+        return {}
+
     computed = dict(fields)
     results = {}
 
     for formula in formulas:
         target = formula["target_field"]
         source = formula.get("source_field", "UnitCost")
-
-        # UnitCost formulas always apply (per-store cost adjustment).
-        # Other targets: skip if already provided by the user.
-        if target != "UnitCost":
-            existing = computed.get(target)
-            if existing not in (None, "", "0", "0.00"):
-                continue
 
         source_val = computed.get(source)
         if source_val is None:
@@ -90,7 +85,6 @@ def calculate_prices(fields, store_id):
 
         calculated = str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
         results[target] = calculated
-        # Update computed so subsequent formulas can chain off this result
         computed[target] = calculated
 
     return results
