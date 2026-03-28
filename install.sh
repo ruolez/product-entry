@@ -24,30 +24,8 @@ WT_HEIGHT=20
 WT_WIDTH=70
 WT_MENU_HEIGHT=10
 
-# Clean blue color scheme
-export NEWT_COLORS='
-root=,blue
-window=,lightgray
-border=blue,lightgray
-shadow=,black
-title=blue,lightgray
-button=white,blue
-actbutton=lightgray,blue
-checkbox=black,lightgray
-actcheckbox=blue,lightgray
-entry=black,white
-label=black,lightgray
-listbox=black,lightgray
-actlistbox=white,blue
-sellistbox=blue,lightgray
-actsellistbox=white,blue
-textbox=black,lightgray
-acttextbox=black,lightgray
-helpline=blue,lightgray
-roottext=white,blue
-emptyscale=,lightgray
-fullscale=,blue
-'
+# Blue background, default dialog colors (guaranteed readable text)
+export NEWT_COLORS='root=,blue roottext=white,blue'
 
 # ── Root check ──────────────────────────────────────────
 if [ "$EUID" -ne 0 ]; then
