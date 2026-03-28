@@ -139,12 +139,17 @@ function renderCategoryTabs() {
         tab.addEventListener("click", () => switchCategoryStore(parseInt(tab.dataset.storeId)));
     });
 
+    // Only switch if current active store is no longer in the selected list
     if (!state.activeCategoryStoreId || !state.selectedStoreIds.includes(state.activeCategoryStoreId)) {
-        switchCategoryStore(state.selectedStoreIds[0]);
+        // Don't re-enter if already loading
+        if (!state._switchingStore) {
+            switchCategoryStore(state.selectedStoreIds[0]);
+        }
     }
 }
 
 async function switchCategoryStore(storeId) {
+    state._switchingStore = true;
     state.activeCategoryStoreId = storeId;
     document.querySelectorAll("#category-store-tabs .store-tab").forEach(t => {
         t.classList.toggle("active", parseInt(t.dataset.storeId) === storeId);
@@ -177,6 +182,7 @@ async function switchCategoryStore(storeId) {
     if (saved?.ManuID) {
         manuSelect.value = saved.ManuID;
     }
+    state._switchingStore = false;
 }
 
 // ── Subcategory Autocomplete ───────────────────────────
@@ -262,7 +268,7 @@ function updateActiveItem(items, index) {
     if (items[index]) items[index].scrollIntoView({ block: "nearest" });
 }
 
-function selectSubcategory(item) {
+async function selectSubcategory(item) {
     const subId = parseInt(item.dataset.subId);
     const catId = parseInt(item.dataset.catId);
     const subName = item.dataset.subName;
@@ -284,24 +290,31 @@ function selectSubcategory(item) {
     setFieldError("SubCateID", "");
     setFieldError("CateID", "");
 
-    // Auto-match: find same subcategory name in other stores that don't have one yet
-    autoMatchSubcategoryToOtherStores(storeId, subName);
-
+    // Auto-match then update tabs (awaited so tabs reflect the result)
+    await autoMatchSubcategoryToOtherStores(storeId, subName);
     renderCategoryTabs();
 }
 
 async function autoMatchSubcategoryToOtherStores(sourceStoreId, subName) {
     const nameLower = subName.toLowerCase();
+
+    // Only match stores that don't have a subcategory yet
+    const storesToMatch = state.selectedStoreIds.filter(sid =>
+        sid !== sourceStoreId && !state.perStoreData[sid]?.SubCateID
+    );
+    if (!storesToMatch.length) return;
+
+    // Fetch all subcategories for unmatched stores in PARALLEL (not sequential)
+    const results = await Promise.all(
+        storesToMatch.map(async (sid) => {
+            const allSubs = await getCachedLookup("all-subcategories", sid);
+            return { sid, allSubs };
+        })
+    );
+
     let matched = 0;
-
-    for (const sid of state.selectedStoreIds) {
-        if (sid === sourceStoreId) continue;
-        // Skip stores that already have a subcategory selected
-        if (state.perStoreData[sid]?.SubCateID) continue;
-
-        const allSubs = await getCachedLookup("all-subcategories", sid);
+    for (const { sid, allSubs } of results) {
         const match = allSubs.find(s => s.SubCateName.toLowerCase() === nameLower);
-
         if (match) {
             if (!state.perStoreData[sid]) state.perStoreData[sid] = {};
             state.perStoreData[sid].CateID = match.CategoryID;
@@ -314,7 +327,6 @@ async function autoMatchSubcategoryToOtherStores(sourceStoreId, subName) {
 
     if (matched > 0) {
         showToast(`Auto-matched "${subName}" in ${matched} other store${matched > 1 ? "s" : ""}`, "success");
-        renderCategoryTabs();
     }
 }
 
