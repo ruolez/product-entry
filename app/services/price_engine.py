@@ -42,49 +42,45 @@ def get_formulas_for_stores(store_ids):
 def calculate_prices(fields, store_id):
     """Apply ALL price formulas for a store. Server-side is authoritative.
 
-    The user enters a BASE cost in UnitCost. Formulas execute in order:
-    1. UnitCost = UnitCost × 1.05  (per-store cost adjustment)
-    2. UnitPrice = UnitCost × 1.20 (now uses adjusted 105, not base 100)
-    3. UnitPriceC = UnitCost × 1.05 (also uses adjusted cost)
+    Every formula calculates from the user-entered BASE COST (UnitCost
+    in the original fields). No chaining - each formula independently
+    uses the same base cost as its source.
 
-    ALL configured formulas are applied unconditionally. The client-side
-    only shows preview values from the base cost; the server recalculates
-    everything with per-store adjustments and chaining.
+    Example with base cost 100:
+      UnitCost  = 100 × 1.05 = 105  (store's local cost)
+      UnitPrice = 100 × 1.20 = 120  (NOT 105 × 1.20)
+      UnitPriceC = 100 × 1.05 = 105 (NOT from adjusted cost)
     """
     formulas = get_formulas_for_store(store_id)
     if not formulas:
         return {}
 
-    computed = dict(fields)
-    results = {}
+    # The base cost is always the user-entered value, never adjusted
+    base_cost_val = fields.get("UnitCost")
+    if base_cost_val is None:
+        return {}
+    try:
+        base_cost = Decimal(str(base_cost_val))
+    except Exception:
+        return {}
 
+    if base_cost <= 0:
+        return {}
+
+    results = {}
     for formula in formulas:
         target = formula["target_field"]
-        source = formula.get("source_field", "UnitCost")
-
-        source_val = computed.get(source)
-        if source_val is None:
-            continue
-        try:
-            source_dec = Decimal(str(source_val))
-        except Exception:
-            continue
-
-        if source_dec <= 0 and formula["operator"] != "fixed":
-            continue
-
         operand = Decimal(str(formula["operand"]))
+
         if formula["operator"] == "multiply":
-            value = source_dec * operand
+            value = base_cost * operand
         elif formula["operator"] == "add":
-            value = source_dec + operand
+            value = base_cost + operand
         elif formula["operator"] == "fixed":
             value = operand
         else:
             continue
 
-        calculated = str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
-        results[target] = calculated
-        computed[target] = calculated
+        results[target] = str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
     return results
