@@ -147,6 +147,25 @@
         color: var(--md-error);
     }
 
+    /* ── Template banner ── */
+    .template-banner {
+        display: flex;
+        align-items: center;
+        gap: var(--md-spacing-sm);
+        margin-top: var(--md-spacing-sm);
+        padding: 8px 12px;
+        background: var(--md-primary-light);
+        border: 1px solid var(--md-primary);
+        border-radius: var(--md-radius-xs);
+        font-size: 0.8125rem;
+        font-family: var(--md-font-family);
+        color: var(--md-primary);
+    }
+    .template-banner #template-banner-text {
+        flex: 1;
+        font-weight: 500;
+    }
+
     /* ── Inline pricing divider ── */
     .inline-pricing {
         margin-top: var(--md-spacing-md);
@@ -310,6 +329,24 @@
 
                     <!-- Right: Product identifiers & metadata -->
                     <div class="general-fields">
+                        <!-- Product Lookup (template/sibling mode) -->
+                        <div class="flex-row">
+                            <div class="form-group full">
+                                <label>Product Lookup <span class="text-sm text-muted">(use existing product as template)</span></label>
+                                <div class="autocomplete-wrap">
+                                    <input type="text" class="form-input" id="product-search" placeholder="Type product description to search..." autocomplete="off">
+                                    <div class="autocomplete-dropdown hidden" id="product-dropdown"></div>
+                                </div>
+                                <div class="template-banner hidden" id="template-banner">
+                                    <span class="material-icons-round" style="font-size:16px; color:var(--md-primary);">content_copy</span>
+                                    <span id="template-banner-text"></span>
+                                    <button class="breadcrumb-clear" id="template-clear" title="Clear template">
+                                        <span class="material-icons-round" style="font-size:14px;">close</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="flex-row">
                             <div class="form-group">
                                 <label>UPC <span class="required-mark">*</span></label>

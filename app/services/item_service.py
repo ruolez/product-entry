@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from models.settings import db
 from services.store_connection import execute_insert, get_store
 from services.price_engine import calculate_prices
+from services.lookup_service import get_product_by_upc
 from services.validation_service import (
     validate_fields,
     validate_per_store_fields,
@@ -204,3 +205,104 @@ def _log_insertion(common_fields, store_ids, succeeded, failed, error_details, f
         db.session.commit()
     except Exception:
         db.session.rollback()
+
+
+def insert_sibling_item(data):
+    store_ids = data["store_ids"]
+    source_upc = data.get("source_upc", "")
+    common_fields = data.get("common_fields", {})
+
+    new_upc = common_fields.get("ProductUPC", "").strip()
+    new_sku = common_fields.get("ProductSKU", "").strip()
+    new_desc = common_fields.get("ProductDescription", "").strip()
+
+    errors = []
+    if not new_upc:
+        errors.append({"field": "ProductUPC", "error": "UPC is required"})
+    if not new_sku:
+        errors.append({"field": "ProductSKU", "error": "SKU is required"})
+    if not new_desc:
+        errors.append({"field": "ProductDescription", "error": "Description is required"})
+    if not source_upc:
+        errors.append({"field": "product-search", "error": "Source product is required"})
+
+    if not errors and new_upc:
+        upc_result = validate_upc(new_upc, store_ids)
+        if not upc_result["is_unique"]:
+            stores_with_upc = ", ".join(f["store_name"] for f in upc_result["found_in"])
+            errors.append({"field": "ProductUPC", "error": f"UPC already exists in: {stores_with_upc}"})
+
+    if not errors and new_sku:
+        sku_result = validate_sku(new_sku, store_ids)
+        if not sku_result["is_unique"]:
+            if sku_result["found_in"]:
+                stores_list = ", ".join(f["store_name"] for f in sku_result["found_in"])
+                errors.append({"field": "ProductSKU", "error": f"SKU already exists in: {stores_list}"})
+            if sku_result["prefix_conflicts"]:
+                stores_list = ", ".join(f["store_name"] for f in sku_result["prefix_conflicts"])
+                errors.append({"field": "ProductSKU", "error": f"SKU prefix conflicts in: {stores_list}"})
+
+    if errors:
+        return {"success": False, "errors": errors, "results": []}
+
+    results = []
+    stores_succeeded = []
+    stores_failed = []
+    error_details = {}
+
+    for store_id in store_ids:
+        store = get_store(store_id)
+        store_name = store["name"] if store else f"Store {store_id}"
+
+        source = get_product_by_upc(store_id, source_upc)
+        if not source:
+            results.append({
+                "store_id": store_id,
+                "store_name": store_name,
+                "success": False,
+                "error": "Source product not found in this store",
+            })
+            stores_failed.append(store_name)
+            error_details[store_name] = "Source product not found"
+            continue
+
+        merged = dict(source)
+        merged.pop("ProductID", None)
+
+        merged["ProductUPC"] = new_upc
+        merged["ProductSKU"] = new_sku
+        merged["ProductDescription"] = new_desc
+
+        merged["LastSold"] = None
+        merged["LastReceived"] = None
+        merged["LastCountDate"] = None
+        merged["QuantOnHand"] = 0
+        merged["QuantOnOrder"] = None
+
+        try:
+            sql, params = _build_insert(merged)
+            product_id = execute_insert(store_id, sql, params)
+            results.append({
+                "store_id": store_id,
+                "store_name": store_name,
+                "success": True,
+                "product_id": product_id,
+            })
+            stores_succeeded.append(store_name)
+        except Exception as e:
+            results.append({
+                "store_id": store_id,
+                "store_name": store_name,
+                "success": False,
+                "error": str(e),
+            })
+            stores_failed.append(store_name)
+            error_details[store_name] = str(e)
+
+    _log_insertion(common_fields, store_ids, stores_succeeded, stores_failed, error_details, data)
+
+    return {
+        "success": len(stores_failed) == 0,
+        "results": results,
+        "errors": [],
+    }

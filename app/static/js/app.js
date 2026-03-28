@@ -10,6 +10,9 @@ const state = {
     perStoreData: {},      // { storeId: { CateID, SubCateID, ManuID } }
     activeCategoryStoreId: null, // which store's categories are showing
     lookupCache: {},             // { "categories-1": [...], "subcategories-1-5": [...] }
+    templateMode: false,
+    templateProduct: null,
+    templateSourceUPC: null,
 };
 
 // ── Init ───────────────────────────────────────────────
@@ -34,6 +37,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     bindKeyboardNav();
     bindActionButtons();
     initSubcategoryAutocomplete();
+    initProductSearch();
 });
 
 // ── Store Selector ─────────────────────────────────────
@@ -423,6 +427,170 @@ document.getElementById("breadcrumb-clear")?.addEventListener("click", () => {
     document.getElementById("subcategory-search")?.focus();
 });
 
+// ── Product Search / Template Mode ─────────────────────
+function initProductSearch() {
+    const input = document.getElementById("product-search");
+    const dropdown = document.getElementById("product-dropdown");
+    if (!input || !dropdown) return;
+
+    let activeIndex = -1;
+
+    input.addEventListener("input", debounce(async () => {
+        const query = input.value.trim();
+        if (query.length < 2 || !state.activeCategoryStoreId) {
+            dropdown.classList.add("hidden");
+            return;
+        }
+
+        try {
+            const results = await api.get(`/api/stores/${state.activeCategoryStoreId}/products/search?q=${encodeURIComponent(query)}`);
+            if (!results.length) {
+                dropdown.innerHTML = '<div class="autocomplete-item" style="color:var(--md-on-surface-variant);pointer-events:none;">No products found</div>';
+                dropdown.classList.remove("hidden");
+                return;
+            }
+
+            activeIndex = -1;
+            dropdown.innerHTML = results.map((p, i) => `
+                <div class="autocomplete-item" data-index="${i}" data-product='${JSON.stringify(p).replace(/'/g, "&#39;")}'>
+                    <span class="ac-subcat">${highlightMatch(p.ProductDescription, query)}</span>
+                    <span class="ac-cat">${p.ProductSKU || ""} &bull; $${parseFloat(p.UnitPrice || 0).toFixed(2)}</span>
+                </div>
+            `).join("");
+            dropdown.classList.remove("hidden");
+
+            dropdown.querySelectorAll(".autocomplete-item[data-product]").forEach(item => {
+                item.addEventListener("click", () => {
+                    const product = JSON.parse(item.dataset.product);
+                    selectTemplateProduct(product);
+                });
+            });
+        } catch {
+            dropdown.classList.add("hidden");
+        }
+    }, 300));
+
+    input.addEventListener("keydown", (e) => {
+        const items = dropdown.querySelectorAll(".autocomplete-item[data-product]");
+        if (!items.length || dropdown.classList.contains("hidden")) return;
+
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            activeIndex = Math.min(activeIndex + 1, items.length - 1);
+            updateActiveItem(items, activeIndex);
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            activeIndex = Math.max(activeIndex - 1, 0);
+            updateActiveItem(items, activeIndex);
+        } else if (e.key === "Enter") {
+            e.preventDefault();
+            if (activeIndex >= 0 && items[activeIndex]) {
+                const product = JSON.parse(items[activeIndex].dataset.product);
+                selectTemplateProduct(product);
+            }
+        } else if (e.key === "Escape") {
+            dropdown.classList.add("hidden");
+        }
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!e.target.closest("#product-search") && !e.target.closest("#product-dropdown")) {
+            dropdown.classList.add("hidden");
+        }
+    });
+}
+
+function selectTemplateProduct(product) {
+    state.templateMode = true;
+    state.templateProduct = product;
+    state.templateSourceUPC = product.ProductUPC;
+
+    document.getElementById("product-search").value = "";
+    document.getElementById("product-dropdown").classList.add("hidden");
+
+    // Show template banner
+    const banner = document.getElementById("template-banner");
+    document.getElementById("template-banner-text").textContent =
+        `Template: ${product.ProductDescription} (${product.ProductUPC})`;
+    banner.classList.remove("hidden");
+
+    // Populate form fields from template (except UPC)
+    const fieldMap = {
+        "ProductSKU": product.ProductSKU,
+        "ProductDescription": product.ProductDescription,
+        "UnitCost": product.UnitCost,
+        "UnitPrice": product.UnitPrice,
+        "UnitPriceA": product.UnitPriceA,
+        "UnitPriceB": product.UnitPriceB,
+        "UnitPriceC": product.UnitPriceC,
+        "MSRPrice": product.MSRPrice,
+        "ProductType": product.ProductType,
+        "ValuationMethod": product.ValuationMethod,
+        "ItemTaxID": product.ItemTaxID,
+        "BarcodeFormat": product.BarcodeFormat,
+        "SPPromoted": product.SPPromoted,
+        "CountInUnit": product.CountInUnit,
+        "ItemSize": product.ItemSize,
+        "ItemWeight": product.ItemWeight,
+        "UnitID": product.UnitID,
+        "UnitQty2": product.UnitQty2,
+        "ReorderLevel": product.ReorderLevel,
+        "ReorderQuant": product.ReorderQuant,
+    };
+
+    for (const [fieldName, value] of Object.entries(fieldMap)) {
+        const el = document.getElementById(`field-${fieldName}`);
+        if (!el || value === null || value === undefined) continue;
+        if (el.type === "checkbox") {
+            el.checked = !!value;
+        } else {
+            el.value = value;
+        }
+    }
+
+    // Clear UPC for new entry and focus it
+    document.getElementById("field-ProductUPC").value = "";
+    setFieldStatus("ProductUPC", "hidden");
+    setFieldError("ProductUPC", "");
+
+    // Set category/subcategory/manufacturer for active store from the product
+    const storeId = state.activeCategoryStoreId;
+    if (storeId && product.CateID && product.SubCateID) {
+        if (!state.perStoreData[storeId]) state.perStoreData[storeId] = {};
+        state.perStoreData[storeId].CateID = product.CateID;
+        state.perStoreData[storeId].SubCateID = product.SubCateID;
+        state.perStoreData[storeId].ManuID = product.ManuID;
+
+        // Try to find subcategory name for breadcrumb
+        getCachedLookup("all-subcategories", storeId).then(allSubs => {
+            const match = allSubs.find(s => s.SubCateID === product.SubCateID);
+            if (match) {
+                state.perStoreData[storeId]._catName = match.CategoryName;
+                state.perStoreData[storeId]._subName = match.SubCateName;
+                showCategoryBreadcrumb(match.CategoryName, match.SubCateName);
+            }
+            renderCategoryTabs();
+        });
+    }
+
+    // Focus UPC for scanning
+    setTimeout(() => document.getElementById("field-ProductUPC")?.focus(), 100);
+    updateAllMargins();
+}
+
+function clearTemplateMode() {
+    state.templateMode = false;
+    state.templateProduct = null;
+    state.templateSourceUPC = null;
+    document.getElementById("template-banner")?.classList.add("hidden");
+    document.getElementById("product-search").value = "";
+}
+
+document.getElementById("template-clear")?.addEventListener("click", () => {
+    clearTemplateMode();
+    clearForm();
+});
+
 // ── Lookup Data Loading ────────────────────────────────
 async function getCachedLookup(type, storeId, parentId) {
     const key = parentId ? `${type}-${storeId}-${parentId}` : `${type}-${storeId}`;
@@ -726,7 +894,21 @@ async function saveItem(andNew = false) {
     saveBtn.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px;"></span> Saving...';
 
     try {
-        const data = collectFormData();
+        let data;
+        if (state.templateMode) {
+            data = {
+                mode: "sibling",
+                store_ids: state.selectedStoreIds,
+                source_upc: state.templateSourceUPC,
+                common_fields: {
+                    ProductUPC: document.getElementById("field-ProductUPC")?.value?.trim(),
+                    ProductSKU: document.getElementById("field-ProductSKU")?.value?.trim(),
+                    ProductDescription: document.getElementById("field-ProductDescription")?.value?.trim(),
+                },
+            };
+        } else {
+            data = collectFormData();
+        }
         const result = await api.post("/api/items", data);
 
         if (result.errors?.length) {
@@ -767,6 +949,7 @@ async function saveItem(andNew = false) {
 
 // ── Clear Form ─────────────────────────────────────────
 function clearForm() {
+    clearTemplateMode();
     document.querySelectorAll("#form-sections .form-input, #form-sections .form-textarea").forEach(el => {
         if (el.type === "checkbox") {
             el.checked = false;

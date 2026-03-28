@@ -10,10 +10,12 @@ from services.lookup_service import (
     get_manufacturers,
     get_promotions,
     get_bin_locations,
+    search_products,
+    get_product_by_upc,
 )
 from services.validation_service import validate_upc, validate_sku
 from services.price_engine import get_formulas_for_stores
-from services.item_service import insert_item, get_field_configs
+from services.item_service import insert_item, insert_sibling_item, get_field_configs
 
 api_bp = Blueprint("api", __name__)
 
@@ -55,6 +57,18 @@ def store_subcategories(store_id):
 def store_all_subcategories(store_id):
     try:
         return jsonify(get_all_subcategories(store_id))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/stores/<int:store_id>/products/search")
+def store_search_products(store_id):
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify([])
+    try:
+        results = search_products(store_id, q)
+        return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -159,7 +173,11 @@ def create_item():
         return jsonify({"error": "common_fields required"}), 400
 
     try:
-        result = insert_item(data)
+        mode = data.get("mode", "new")
+        if mode == "sibling":
+            result = insert_sibling_item(data)
+        else:
+            result = insert_item(data)
         status = 200 if result["success"] else 207
         if result.get("errors"):
             status = 422

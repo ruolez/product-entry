@@ -59,3 +59,31 @@ def get_bin_locations(store_id):
         store_id,
         "SELECT DISTINCT BinLocationID FROM Items_BinLocations WHERE BinLocationID IS NOT NULL ORDER BY BinLocationID",
     )
+
+
+def search_products(store_id, query):
+    return execute_query(
+        store_id,
+        "SELECT TOP 50 ProductID, ProductUPC, ProductSKU, ProductDescription, "
+        "CateID, SubCateID, ManuID, UnitCost, UnitPrice, UnitPriceA, UnitPriceB, UnitPriceC, "
+        "MSRPrice, ProductType, ValuationMethod, ItemTaxID, BarcodeFormat, "
+        "SPPromoted, CountInUnit, ItemSize, ItemWeight, UnitID, UnitQty2, "
+        "ReorderLevel, ReorderQuant "
+        "FROM Items_tbl WHERE Discontinued = 0 AND ProductDescription LIKE %s "
+        "ORDER BY ProductDescription",
+        (f"%{query}%",),
+    )
+
+
+def get_product_by_upc(store_id, upc):
+    rows = execute_query(
+        store_id,
+        "SELECT ProductID, ProductUPC, ProductSKU, ProductDescription, "
+        "CateID, SubCateID, ManuID, UnitCost, UnitPrice, UnitPriceA, UnitPriceB, UnitPriceC, "
+        "MSRPrice, ProductType, ValuationMethod, ItemTaxID, BarcodeFormat, "
+        "SPPromoted, CountInUnit, ItemSize, ItemWeight, UnitID, UnitQty2, "
+        "ReorderLevel, ReorderQuant "
+        "FROM Items_tbl WHERE ProductUPC = %s",
+        (upc,),
+    )
+    return rows[0] if rows else None
