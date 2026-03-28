@@ -117,7 +117,12 @@ async function onStoreSelectionChange() {
 
     if (count > 0) {
         loadPriceFormulas();
-        loadLookupData(state.selectedStoreIds[0]);
+        await loadLookupData(state.selectedStoreIds[0]);
+    }
+
+    // Re-apply visibility after lookups populate selects
+    if (state.fieldConfigs.length) {
+        applyFieldVisibility(state.fieldConfigs);
     }
 }
 
@@ -556,6 +561,9 @@ function selectTemplateProduct(product) {
 
     // Look up source UPC in ALL selected stores immediately
     await lookupSourceInAllStores(product.ProductUPC);
+
+    // Re-apply visibility (template may have set values on hidden fields)
+    applyFieldVisibility(state.fieldConfigs);
 
     // Focus UPC for scanning
     setTimeout(() => document.getElementById("field-ProductUPC")?.focus(), 100);
