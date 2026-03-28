@@ -117,12 +117,9 @@ async function onStoreSelectionChange() {
 
     if (count > 0) {
         loadPriceFormulas();
-        await loadLookupData(state.selectedStoreIds[0]);
-    }
-
-    // Re-apply visibility after lookups populate selects
-    if (state.fieldConfigs.length) {
-        applyFieldVisibility(state.fieldConfigs);
+        loadLookupData(state.selectedStoreIds[0]).then(() => {
+            if (state.fieldConfigs.length) applyFieldVisibility(state.fieldConfigs);
+        });
     }
 }
 
@@ -506,7 +503,7 @@ function initProductSearch() {
     });
 }
 
-function selectTemplateProduct(product) {
+async function selectTemplateProduct(product) {
     state.templateMode = true;
     state.templateProduct = product;
     state.templateSourceUPC = product.ProductUPC;
