@@ -73,6 +73,23 @@ def store_search_products(store_id):
         return jsonify({"error": str(e)}), 500
 
 
+@api_bp.route("/products/lookup-by-upc", methods=["POST"])
+def bulk_lookup_by_upc():
+    data = request.get_json()
+    upc = data.get("upc", "")
+    store_ids = data.get("store_ids", [])
+    if not upc or not store_ids:
+        return jsonify({"error": "upc and store_ids required"}), 400
+    try:
+        results = {}
+        for sid in store_ids:
+            product = get_product_by_upc(sid, upc)
+            results[str(sid)] = product
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.route("/stores/<int:store_id>/taxes")
 def store_taxes(store_id):
     try:

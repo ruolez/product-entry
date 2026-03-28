@@ -159,6 +159,10 @@
     color: var(--md-error);
 }
 
+.store-tab .tab-status.not-found {
+    color: var(--md-warning);
+}
+
 /* Sticky Action Bar */
 .action-bar {
     position: sticky;

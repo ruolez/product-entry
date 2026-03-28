@@ -133,8 +133,9 @@ function renderCategoryTabs() {
         const store = state.stores.find(s => s.id === sid);
         const data = state.perStoreData[sid];
         const assigned = data?.CateID && data?.SubCateID;
-        const statusClass = assigned ? "assigned" : "missing";
-        const statusIcon = assigned ? "check_circle" : "radio_button_unchecked";
+        const notFound = state.templateMode && data?._matched === false;
+        const statusClass = notFound ? "not-found" : (assigned ? "assigned" : "missing");
+        const statusIcon = notFound ? "error_outline" : (assigned ? "check_circle" : "radio_button_unchecked");
         return `
             <button class="store-tab ${sid === state.activeCategoryStoreId ? "active" : ""}"
                     data-store-id="${sid}">
@@ -548,34 +549,73 @@ function selectTemplateProduct(product) {
         }
     }
 
-    // Clear UPC for new entry and focus it
+    // Clear UPC for new entry
     document.getElementById("field-ProductUPC").value = "";
     setFieldStatus("ProductUPC", "hidden");
     setFieldError("ProductUPC", "");
 
-    // Set category/subcategory/manufacturer for active store from the product
-    const storeId = state.activeCategoryStoreId;
-    if (storeId && product.CateID && product.SubCateID) {
-        if (!state.perStoreData[storeId]) state.perStoreData[storeId] = {};
-        state.perStoreData[storeId].CateID = product.CateID;
-        state.perStoreData[storeId].SubCateID = product.SubCateID;
-        state.perStoreData[storeId].ManuID = product.ManuID;
-
-        // Try to find subcategory name for breadcrumb
-        getCachedLookup("all-subcategories", storeId).then(allSubs => {
-            const match = allSubs.find(s => s.SubCateID === product.SubCateID);
-            if (match) {
-                state.perStoreData[storeId]._catName = match.CategoryName;
-                state.perStoreData[storeId]._subName = match.SubCateName;
-                showCategoryBreadcrumb(match.CategoryName, match.SubCateName);
-            }
-            renderCategoryTabs();
-        });
-    }
+    // Look up source UPC in ALL selected stores immediately
+    await lookupSourceInAllStores(product.ProductUPC);
 
     // Focus UPC for scanning
     setTimeout(() => document.getElementById("field-ProductUPC")?.focus(), 100);
     updateAllMargins();
+}
+
+async function lookupSourceInAllStores(sourceUPC) {
+    if (!state.selectedStoreIds.length) return;
+
+    try {
+        const results = await api.post("/api/products/lookup-by-upc", {
+            upc: sourceUPC,
+            store_ids: state.selectedStoreIds,
+        });
+
+        let found = 0;
+        let notFound = [];
+
+        for (const sid of state.selectedStoreIds) {
+            const product = results[String(sid)];
+            if (product) {
+                if (!state.perStoreData[sid]) state.perStoreData[sid] = {};
+                state.perStoreData[sid].CateID = product.CateID;
+                state.perStoreData[sid].SubCateID = product.SubCateID;
+                state.perStoreData[sid].ManuID = product.ManuID;
+                state.perStoreData[sid]._matched = true;
+
+                // Resolve subcategory name for breadcrumb display
+                const allSubs = await getCachedLookup("all-subcategories", sid);
+                const sub = allSubs.find(s => s.SubCateID === product.SubCateID);
+                if (sub) {
+                    state.perStoreData[sid]._catName = sub.CategoryName;
+                    state.perStoreData[sid]._subName = sub.SubCateName;
+                }
+                found++;
+            } else {
+                if (!state.perStoreData[sid]) state.perStoreData[sid] = {};
+                state.perStoreData[sid]._matched = false;
+                const store = state.stores.find(s => s.id === sid);
+                notFound.push(store?.name || sid);
+            }
+        }
+
+        // Show breadcrumb for currently active store
+        const activeData = state.perStoreData[state.activeCategoryStoreId];
+        if (activeData?._catName) {
+            showCategoryBreadcrumb(activeData._catName, activeData._subName);
+        }
+
+        renderCategoryTabs();
+
+        if (notFound.length > 0) {
+            showToast(`Source product not found in: ${notFound.join(", ")}. These stores will be skipped on save.`, "warning", 8000);
+        }
+        if (found > 0) {
+            showToast(`Product matched in ${found} store${found > 1 ? "s" : ""}`, "success");
+        }
+    } catch (err) {
+        showToast(`Error looking up product: ${err.message}`, "error");
+    }
 }
 
 function clearTemplateMode() {
