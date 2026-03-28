@@ -79,6 +79,11 @@ function renderStoreSelector(stores) {
         updateToggleAllState();
         onStoreSelectionChange();
     });
+
+    // Select all stores by default
+    container.querySelectorAll(".store-chip[data-store-id]").forEach(c => c.classList.add("selected"));
+    updateToggleAllState();
+    onStoreSelectionChange();
 }
 
 function updateToggleAllState() {
