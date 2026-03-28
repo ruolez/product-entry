@@ -221,42 +221,6 @@
         opacity: 0;
     }
 
-    /* ── Unit conversion table ── */
-    .unit-table-section {
-        margin-top: var(--md-spacing-md);
-        padding-top: var(--md-spacing-md);
-        border-top: 1px solid var(--md-outline-variant);
-    }
-    .unit-table-wrap { overflow-x: auto; margin-top: var(--md-spacing-md); }
-    .unit-table { width: 100%; border-collapse: collapse; }
-    .unit-table th {
-        font-family: var(--md-font-family);
-        font-size: 0.7rem;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: var(--md-on-surface-variant);
-        padding: var(--md-spacing-sm);
-        text-align: left;
-        border-bottom: 2px solid var(--md-outline);
-        white-space: nowrap;
-    }
-    .unit-table td {
-        padding: var(--md-spacing-xs) var(--md-spacing-sm);
-        vertical-align: middle;
-    }
-    .unit-table .form-input, .unit-table .form-select {
-        padding: 6px 8px; font-size: 0.8125rem; min-width: 70px;
-    }
-    .unit-table .money-input-wrapper .form-input { padding-left: 20px; min-width: 90px; }
-    .unit-table .money-input-wrapper .currency-symbol { left: 8px; font-size: 0.8125rem; }
-    .unit-row-label {
-        font-family: var(--md-font-family);
-        font-size: 0.75rem;
-        font-weight: 500;
-        color: var(--md-on-surface-variant);
-        white-space: nowrap;
-    }
 
     /* ── Section badges ── */
     .section-badge {
@@ -583,45 +547,32 @@
                     </div>
                 </div>
 
-                <!-- Units of Measure Conversion Table -->
-                <div class="unit-table-section" id="unit-table-section">
-                    <div class="category-panel-title"><span>Units of Measure</span></div>
-                    <div class="unit-table-wrap">
-                        <table class="unit-table">
-                            <thead><tr>
-                                <th style="width:40px;"></th><th>Unit</th><th>Count</th><th>Price</th><th>Cash & Carry</th><th>Delivery A</th><th>Delivery B</th>
-                            </tr></thead>
-                            <tbody>
-                                <tr id="unit-row-2">
-                                    <td class="unit-row-label">U2</td>
-                                    <td><select class="form-select" id="field-UnitID2" name="UnitID2"><option value="0">-- None --</option></select></td>
-                                    <td><input type="number" class="form-input" id="field-UnitQty2" name="UnitQty2" value="0"></td>
-                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPrice2" name="UnitPrice2" value="0.00"></div></td>
-                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceA2" name="UnitPriceA2" value="0.00"></div></td>
-                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceB2" name="UnitPriceB2" value="0.00"></div></td>
-                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceC2" name="UnitPriceC2" value="0.00"></div></td>
-                                </tr>
-                                <tr id="unit-row-3">
-                                    <td class="unit-row-label">U3</td>
-                                    <td><select class="form-select" id="field-UnitID3" name="UnitID3"><option value="0">-- None --</option></select></td>
-                                    <td><input type="number" class="form-input" id="field-UnitQty3" name="UnitQty3" value="0"></td>
-                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPrice3" name="UnitPrice3" value="0.00"></div></td>
-                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceA3" name="UnitPriceA3" value="0.00"></div></td>
-                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceB3" name="UnitPriceB3" value="0.00"></div></td>
-                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceC3" name="UnitPriceC3" value="0.00"></div></td>
-                                </tr>
-                                <tr id="unit-row-4">
-                                    <td class="unit-row-label">U4</td>
-                                    <td><select class="form-select" id="field-UnitID4" name="UnitID4"><option value="0">-- None --</option></select></td>
-                                    <td><input type="number" class="form-input" id="field-UnitQty4" name="UnitQty4" value="0"></td>
-                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPrice4" name="UnitPrice4" value="0.00"></div></td>
-                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceA4" name="UnitPriceA4" value="0.00"></div></td>
-                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceB4" name="UnitPriceB4" value="0.00"></div></td>
-                                    <td><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceC4" name="UnitPriceC4" value="0.00"></div></td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                <!-- Unit 2 fields (shown as normal form fields) -->
+                <div class="flex-row">
+                    <div class="form-group"><label>Unit 2</label><select class="form-select" id="field-UnitID2" name="UnitID2"><option value="0">-- None --</option></select></div>
+                    <div class="form-group"><label>Unit 2 Count</label><input type="number" class="form-input" id="field-UnitQty2" name="UnitQty2" value="0"></div>
+                    <div class="form-group"><label>Unit 2 Price</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPrice2" name="UnitPrice2" value="0.00"></div></div>
+                    <div class="form-group"><label>Unit 2 C&C</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceA2" name="UnitPriceA2" value="0.00"></div></div>
+                    <div class="form-group"><label>Unit 2 Del A</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceB2" name="UnitPriceB2" value="0.00"></div></div>
+                    <div class="form-group"><label>Unit 2 Del B</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceC2" name="UnitPriceC2" value="0.00"></div></div>
+                </div>
+                <!-- Unit 3 fields -->
+                <div class="flex-row">
+                    <div class="form-group"><label>Unit 3</label><select class="form-select" id="field-UnitID3" name="UnitID3"><option value="0">-- None --</option></select></div>
+                    <div class="form-group"><label>Unit 3 Count</label><input type="number" class="form-input" id="field-UnitQty3" name="UnitQty3" value="0"></div>
+                    <div class="form-group"><label>Unit 3 Price</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPrice3" name="UnitPrice3" value="0.00"></div></div>
+                    <div class="form-group"><label>Unit 3 C&C</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceA3" name="UnitPriceA3" value="0.00"></div></div>
+                    <div class="form-group"><label>Unit 3 Del A</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceB3" name="UnitPriceB3" value="0.00"></div></div>
+                    <div class="form-group"><label>Unit 3 Del B</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceC3" name="UnitPriceC3" value="0.00"></div></div>
+                </div>
+                <!-- Unit 4 fields -->
+                <div class="flex-row">
+                    <div class="form-group"><label>Unit 4</label><select class="form-select" id="field-UnitID4" name="UnitID4"><option value="0">-- None --</option></select></div>
+                    <div class="form-group"><label>Unit 4 Count</label><input type="number" class="form-input" id="field-UnitQty4" name="UnitQty4" value="0"></div>
+                    <div class="form-group"><label>Unit 4 Price</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPrice4" name="UnitPrice4" value="0.00"></div></div>
+                    <div class="form-group"><label>Unit 4 C&C</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceA4" name="UnitPriceA4" value="0.00"></div></div>
+                    <div class="form-group"><label>Unit 4 Del A</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceB4" name="UnitPriceB4" value="0.00"></div></div>
+                    <div class="form-group"><label>Unit 4 Del B</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceC4" name="UnitPriceC4" value="0.00"></div></div>
                 </div>
             </div>
         </div>
