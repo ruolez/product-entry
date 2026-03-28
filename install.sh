@@ -142,12 +142,17 @@ run_with_progress() {
     return 0
 }
 
-# ── Gauge helper (multi-line progress text) ─────────────
+# ── Gauge helper ────────────────────────────────────────
+# Whiptail gauge shows text between XXX markers as a single block.
+# We format: PHASE header on line 1, detail on line 2.
 gauge_msg() {
-    local pct="$1"; shift
+    local pct="$1"
+    local phase="$2"
+    local detail="$3"
     echo "$pct"
     echo "XXX"
-    for line in "$@"; do echo "$line"; done
+    echo "${phase}"
+    [ -n "$detail" ] && echo "${detail}"
     echo "XXX"
 }
 
@@ -373,186 +378,77 @@ Proceed with installation?" \
     fernet_key=$(generate_fernet_key)
 
     {
-        gauge_msg 0 \
-            "PHASE 1: System Dependencies" \
-            "" \
-            "Running apt-get update..."
+        gauge_msg 0  "[ 1/20] System Dependencies" "Running apt-get update..."
         apt-get update -qq >> "$LOG" 2>&1
-        log "Package lists updated"
 
-        gauge_msg 2 \
-            "PHASE 1: System Dependencies" \
-            "" \
-            "Installing: git, curl, openssl, python3" \
-            "These are required for cloning the repo and generating keys."
+        gauge_msg 3  "[ 2/20] System Dependencies" "Installing git, curl, openssl, python3..."
         apt-get install -y -qq git curl openssl python3 >> "$LOG" 2>&1
-        log "Core packages installed"
 
-        gauge_msg 5 \
-            "PHASE 1: System Dependencies" \
-            "" \
-            "Installing: ca-certificates, gnupg, lsb-release" \
-            "Required for Docker repository authentication."
+        gauge_msg 5  "[ 3/20] System Dependencies" "Installing ca-certificates, gnupg, lsb-release..."
         apt-get install -y -qq ca-certificates gnupg lsb-release >> "$LOG" 2>&1
-        log "Certificate packages installed"
 
-        gauge_msg 7 \
-            "PHASE 2: Docker Engine" \
-            "" \
-            "Checking if Docker is already installed..."
+        gauge_msg 7  "[ 4/20] Docker Engine" "Checking if Docker is installed..."
         if ! command -v docker &>/dev/null; then
-            gauge_msg 8 \
-                "PHASE 2: Docker Engine" \
-                "" \
-                "Docker not found. Starting installation." \
-                "Adding Docker official GPG key to /etc/apt/keyrings..."
+            gauge_msg 8  "[ 5/20] Docker Engine" "Adding Docker GPG key..."
             install -m 0755 -d /etc/apt/keyrings >> "$LOG" 2>&1
             curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc 2>> "$LOG"
             chmod a+r /etc/apt/keyrings/docker.asc
-            log "Docker GPG key added"
 
-            gauge_msg 10 \
-                "PHASE 2: Docker Engine" \
-                "" \
-                "Adding Docker APT repository for Ubuntu." \
-                "Source: https://download.docker.com/linux/ubuntu"
+            gauge_msg 10 "[ 6/20] Docker Engine" "Adding Docker APT repository..."
             echo \
                 "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
                 https://download.docker.com/linux/ubuntu \
                 $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
                 tee /etc/apt/sources.list.d/docker.list >/dev/null
-            log "Docker repo added"
 
-            gauge_msg 12 \
-                "PHASE 2: Docker Engine" \
-                "" \
-                "Refreshing package lists with Docker repository..."
+            gauge_msg 12 "[ 7/20] Docker Engine" "Updating package lists with Docker repo..."
             apt-get update -qq >> "$LOG" 2>&1
 
-            gauge_msg 14 \
-                "PHASE 2: Docker Engine" \
-                "" \
-                "Downloading and installing Docker Engine (~400MB)..." \
-                "Packages: docker-ce, docker-ce-cli"
+            gauge_msg 14 "[ 8/20] Docker Engine" "Installing docker-ce, docker-ce-cli (~400MB download)..."
             apt-get install -y -qq docker-ce docker-ce-cli >> "$LOG" 2>&1
-            log "Docker engine installed"
 
-            gauge_msg 18 \
-                "PHASE 2: Docker Engine" \
-                "" \
-                "Installing container runtime and build tools..." \
-                "Packages: containerd.io, docker-buildx, docker-compose"
+            gauge_msg 18 "[ 9/20] Docker Engine" "Installing containerd, buildx, compose plugin..."
             apt-get install -y -qq containerd.io docker-buildx-plugin docker-compose-plugin >> "$LOG" 2>&1
-            log "Docker plugins installed"
 
-            gauge_msg 22 \
-                "PHASE 2: Docker Engine" \
-                "" \
-                "Enabling Docker service (systemctl enable --now)..." \
-                "Docker will start automatically on boot."
+            gauge_msg 22 "[10/20] Docker Engine" "Enabling Docker service (auto-start on boot)..."
             systemctl enable docker --now >> "$LOG" 2>&1
             sleep 2
-            log "Docker service started"
 
-            gauge_msg 25 \
-                "PHASE 2: Docker Engine  [COMPLETE]" \
-                "" \
-                "$(docker --version 2>/dev/null | head -1)" \
-                "Docker Compose $(docker compose version 2>/dev/null | head -1)"
+            gauge_msg 25 "[10/20] Docker Engine" "Done: $(docker --version 2>/dev/null | head -c 40)"
             sleep 1
         else
-            gauge_msg 25 \
-                "PHASE 2: Docker Engine  [SKIPPED]" \
-                "" \
-                "Docker already installed:" \
-                "$(docker --version | head -1)"
-            log "Docker already present"
+            gauge_msg 25 "[10/20] Docker Engine" "Already installed: $(docker --version | head -c 40)"
             sleep 1
         fi
 
-        gauge_msg 27 \
-            "PHASE 3: Clone Repository" \
-            "" \
-            "Connecting to GitHub..." \
-            "URL: ${REPO_URL}"
+        gauge_msg 27 "[11/20] Clone Repository" "Cloning ${REPO_URL}..."
         git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" >> "$LOG" 2>&1
-        log "Repository cloned"
-        gauge_msg 32 \
-            "PHASE 3: Clone Repository  [COMPLETE]" \
-            "" \
-            "Cloned to: ${INSTALL_DIR}" \
-            "Branch: main (shallow clone, depth=1)"
+        gauge_msg 32 "[11/20] Clone Repository" "Cloned to ${INSTALL_DIR}"
         sleep 1
 
-        gauge_msg 33 \
-            "PHASE 4: Production Configuration" \
-            "" \
-            "Generating secure PostgreSQL password (24 chars)..." \
-            "Generating Fernet encryption key (base64, 32 bytes)..."
+        gauge_msg 33 "[12/20] Generate Config" "Generating secure PostgreSQL password and Fernet key..."
         sleep 1
-
-        gauge_msg 34 \
-            "PHASE 4: Production Configuration" \
-            "" \
-            "Writing .env file with:" \
-            "  - PostgreSQL credentials" \
-            "  - Fernet encryption key for store passwords" \
-            "  - Server IP: ${server_ip}"
+        gauge_msg 34 "[12/20] Generate Config" "Writing .env (credentials, IP: ${server_ip})..."
         generate_env_file "$server_ip" "$pg_pass" "$fernet_key"
-        log "Env file generated"
 
-        gauge_msg 36 \
-            "PHASE 4: Production Configuration" \
-            "" \
-            "Generating docker-compose.prod.yml" \
-            "  - 3 services: nginx, app, postgres" \
-            "  - Log rotation: 10MB max, 3 files" \
-            "  - Persistent volume for database"
+        gauge_msg 36 "[13/20] Generate Config" "Writing docker-compose.prod.yml (3 services, log rotation)..."
         generate_prod_compose
-        log "Compose file generated"
 
-        gauge_msg 37 \
-            "PHASE 4: Production Configuration" \
-            "" \
-            "Generating Dockerfile.prod" \
-            "  - Base: python:3.12-slim + FreeTDS" \
-            "  - 4 Gunicorn workers (production mode)" \
-            "  - No auto-reload, preloaded app"
+        gauge_msg 37 "[14/20] Generate Config" "Writing Dockerfile.prod (python:3.12, 4 Gunicorn workers)..."
         generate_prod_dockerfile
-        log "Prod Dockerfile generated"
 
-        gauge_msg 39 \
-            "PHASE 4: Production Configuration" \
-            "" \
-            "Generating nginx.conf" \
-            "  - Server name: ${server_ip}" \
-            "  - CORS headers for http://${server_ip}" \
-            "  - Security headers (XSS, nosniff, frame)" \
-            "  - Proxy timeouts: 120s for MS SQL"
+        gauge_msg 39 "[15/20] Generate Config" "Writing nginx.conf (server: ${server_ip}, CORS, security)..."
         generate_prod_nginx "$server_ip"
-        log "Nginx config generated"
 
-        gauge_msg 40 \
-            "PHASE 4: Production Configuration  [COMPLETE]" \
-            "" \
-            "All config files generated in ${INSTALL_DIR}"
+        gauge_msg 40 "[15/20] Generate Config" "All production configs generated."
         sleep 1
 
         cd "$INSTALL_DIR"
 
-        gauge_msg 41 \
-            "PHASE 5: Build Docker Containers" \
-            "" \
-            "Pulling postgres:16-alpine base image..."
+        gauge_msg 41 "[16/20] Pull Base Images" "Pulling postgres:16-alpine..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" pull postgres >> "$LOG" 2>&1 || true
 
-        gauge_msg 45 \
-            "PHASE 5: Build Docker Containers" \
-            "" \
-            "Building APP container (this takes 2-5 minutes)..." \
-            "  - Installing system packages: FreeTDS, GCC" \
-            "  - Installing Python packages: Flask, pymssql, etc." \
-            "  - Copying application code"
+        gauge_msg 45 "[17/20] Build App Container" "Installing FreeTDS, GCC, Flask, pymssql (2-5 min)..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --progress=plain app >> "$LOG" 2>&1 &
         local build_pid=$!
         local build_pct=45
@@ -560,129 +456,64 @@ Proceed with installation?" \
             build_pct=$((build_pct + 1))
             [ $build_pct -gt 66 ] && build_pct=66
             local last_line
-            last_line=$(tail -1 "$LOG" 2>/dev/null | sed 's/^[#0-9 ]*//' | head -c 55)
-            echo "$build_pct"
-            echo "XXX"
-            echo "PHASE 5: Build Docker Containers"
-            echo ""
-            echo "Building APP container..."
-            echo "  > ${last_line:-working...}"
-            echo "XXX"
+            last_line=$(tail -1 "$LOG" 2>/dev/null | sed 's/^[#0-9 ]*//' | head -c 50)
+            gauge_msg "$build_pct" "[17/20] Build App Container" "> ${last_line:-working...}"
             sleep 3
         done
         wait $build_pid || true
-        log "App container built"
 
-        gauge_msg 68 \
-            "PHASE 5: Build Docker Containers" \
-            "" \
-            "Building NGINX container..." \
-            "  - Base: nginx:alpine" \
-            "  - Copying nginx.conf"
+        gauge_msg 68 "[18/20] Build Nginx Container" "Building nginx:alpine with custom config..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --progress=plain nginx >> "$LOG" 2>&1
-        log "Nginx container built"
-        gauge_msg 72 \
-            "PHASE 5: Build Docker Containers  [COMPLETE]" \
-            "" \
-            "All 3 container images built successfully."
+        gauge_msg 72 "[18/20] Build Containers" "All container images built successfully."
         sleep 1
 
-        gauge_msg 73 \
-            "PHASE 6: Start Services" \
-            "" \
-            "Creating Docker bridge network..." \
-            "Starting PostgreSQL 16 container..."
+        gauge_msg 73 "[19/20] Start PostgreSQL" "Creating network, starting postgres:16..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d postgres >> "$LOG" 2>&1
-
         local pg_retries=0
         while [ $pg_retries -lt 15 ]; do
             if $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres pg_isready -U itementry >> "$LOG" 2>&1; then
                 break
             fi
             pg_retries=$((pg_retries + 1))
-            gauge_msg "$((74 + pg_retries / 3))" \
-                "PHASE 6: Start Services" \
-                "" \
-                "Waiting for PostgreSQL to accept connections..." \
-                "  Health check attempt ${pg_retries}/15"
+            gauge_msg "$((74 + pg_retries / 3))" "[19/20] Start PostgreSQL" "Waiting for health check (attempt ${pg_retries}/15)..."
             sleep 2
         done
-        log "PostgreSQL healthy"
 
-        gauge_msg 79 \
-            "PHASE 6: Start Services" \
-            "" \
-            "PostgreSQL is healthy." \
-            "Starting Flask application (4 Gunicorn workers)..."
+        gauge_msg 79 "[19/20] Start Application" "Starting Flask/Gunicorn (4 workers)..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d app >> "$LOG" 2>&1
         sleep 2
-        log "App started"
 
-        gauge_msg 82 \
-            "PHASE 6: Start Services" \
-            "" \
-            "Flask app is running." \
-            "Starting Nginx reverse proxy on port ${PORT}..."
+        gauge_msg 81 "[19/20] Start Nginx" "Starting reverse proxy on port ${PORT}..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d nginx >> "$LOG" 2>&1
         sleep 1
-        log "Nginx started"
-
-        gauge_msg 84 \
-            "PHASE 6: Start Services  [COMPLETE]" \
-            "" \
-            "All 3 containers running:" \
-            "  - postgres  (PostgreSQL 16)" \
-            "  - app       (Flask + Gunicorn)" \
-            "  - nginx     (Reverse proxy, port ${PORT})"
+        gauge_msg 83 "[19/20] Start Services" "All 3 containers are running."
         sleep 1
 
-        gauge_msg 86 \
-            "PHASE 7: Verification" \
-            "" \
-            "Running health check: GET http://localhost/api/health"
+        gauge_msg 85 "[20/20] Health Check" "GET http://localhost/api/health ..."
         local retries=0
         while [ $retries -lt 20 ]; do
             if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
-                log "Health check passed"
                 break
             fi
             retries=$((retries + 1))
-            gauge_msg "$((86 + retries / 2))" \
-                "PHASE 7: Verification" \
-                "" \
-                "Waiting for application to respond..." \
-                "  Attempt ${retries}/20 - retrying in 2 seconds"
+            gauge_msg "$((85 + retries / 2))" "[20/20] Health Check" "Waiting for response (attempt ${retries}/20)..."
             sleep 2
         done
 
-        gauge_msg 96 \
-            "PHASE 7: Verification" \
-            "" \
-            "Health check passed." \
-            "Verifying database schema (tables, seed data)..."
-        local table_count
+        gauge_msg 96 "[20/20] Verify Database" "Checking tables and seed data..."
+        local table_count field_count
         table_count=$($DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
             psql -U itementry -d itementry -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null | tr -d ' ' || echo "?")
-        local field_count
         field_count=$($DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
             psql -U itementry -d itementry -t -c "SELECT count(*) FROM field_configs;" 2>/dev/null | tr -d ' ' || echo "?")
-        log "Database: ${table_count} tables, ${field_count} field configs"
 
-        gauge_msg 99 \
-            "PHASE 7: Verification  [COMPLETE]" \
-            "" \
-            "Database verified:" \
-            "  - ${table_count} tables created" \
-            "  - ${field_count} field configurations seeded"
+        gauge_msg 99 "[20/20] Verify Database" "OK: ${table_count} tables, ${field_count} field configs."
         sleep 1
 
-        gauge_msg 100 \
-            "INSTALLATION COMPLETE" \
-            "" \
-            "All services are running at http://${server_ip}"
+        gauge_msg 100 "Installation complete!" "All services running at http://${server_ip}"
         sleep 1
 
-    } | whiptail --gauge "Initializing..." 12 $WT_WIDTH 0 --title "Installing ${APP_TITLE}"
+    } | whiptail --gauge "Preparing..." 8 $WT_WIDTH 0 --title "Installing ${APP_TITLE}"
 
     # ── Result ────────────────────────────────────────
     if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
@@ -768,113 +599,49 @@ Proceed?" \
     fi
 
     {
-        gauge_msg 0 \
-            "PHASE 1: Backup Configuration" \
-            "" \
-            "Backing up .env to .env.backup..." \
-            "  Preserving: PostgreSQL password, Fernet key, Server IP"
+        gauge_msg 0  "[ 1/16] Backup Config" "Backing up .env to .env.backup..."
         cp .env .env.backup 2>/dev/null || true
-        log "Config backed up"
 
-        gauge_msg 3 \
-            "PHASE 1: Backup Configuration  [COMPLETE]" \
-            "" \
-            "Credentials and encryption keys preserved."
-        sleep 1
-
-        gauge_msg 5 \
-            "PHASE 2: Stop Services" \
-            "" \
-            "Stopping Nginx reverse proxy..."
+        gauge_msg 5  "[ 2/16] Stop Nginx" "Stopping reverse proxy..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" stop nginx >> "$LOG" 2>&1 || true
 
-        gauge_msg 8 \
-            "PHASE 2: Stop Services" \
-            "" \
-            "Stopping Flask application..."
+        gauge_msg 8  "[ 3/16] Stop App" "Stopping Flask application..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" stop app >> "$LOG" 2>&1 || true
 
-        gauge_msg 11 \
-            "PHASE 2: Stop Services" \
-            "" \
-            "Stopping PostgreSQL..." \
-            "  Database data is safe in Docker volume."
+        gauge_msg 11 "[ 4/16] Stop Postgres" "Stopping database (data safe in volume)..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" down >> "$LOG" 2>&1 || \
         $DC -p "$COMPOSE_PROJECT" down >> "$LOG" 2>&1 || true
-        log "Services stopped"
 
-        gauge_msg 15 \
-            "PHASE 2: Stop Services  [COMPLETE]" \
-            "" \
-            "All containers stopped." \
-            "Data volume preserved."
+        gauge_msg 15 "[ 4/16] Services Stopped" "All containers down. Data volume preserved."
         sleep 1
 
-        gauge_msg 17 \
-            "PHASE 3: Pull Latest Code" \
-            "" \
-            "Fetching from origin/main..." \
-            "  Repository: ${REPO_URL}"
+        gauge_msg 17 "[ 5/16] Fetch Code" "git fetch origin main..."
         git fetch origin main >> "$LOG" 2>&1
-        log "Fetch complete"
 
-        gauge_msg 20 \
-            "PHASE 3: Pull Latest Code" \
-            "" \
-            "Applying latest commit (git reset --hard)..."
+        gauge_msg 20 "[ 6/16] Apply Code" "git reset --hard origin/main..."
         git reset --hard origin/main >> "$LOG" 2>&1
         local commit_msg
-        commit_msg=$(git log --oneline -1 2>/dev/null | head -c 55)
-        log "Code updated to: ${commit_msg}"
+        commit_msg=$(git log --oneline -1 2>/dev/null | head -c 50)
 
-        gauge_msg 25 \
-            "PHASE 3: Pull Latest Code  [COMPLETE]" \
-            "" \
-            "Updated to: ${commit_msg}"
+        gauge_msg 25 "[ 6/16] Code Updated" "${commit_msg}"
         sleep 1
 
-        gauge_msg 26 \
-            "PHASE 4: Regenerate Configuration" \
-            "" \
-            "Writing .env (preserving password + Fernet key)..." \
-            "  Server IP: ${server_ip}"
+        gauge_msg 27 "[ 7/16] Regenerate .env" "Preserving password + Fernet key, IP: ${server_ip}"
         generate_env_file "$server_ip" "$pg_pass" "$fernet_key"
-        log "Env file regenerated"
 
-        gauge_msg 28 \
-            "PHASE 4: Regenerate Configuration" \
-            "" \
-            "Generating docker-compose.prod.yml..." \
-            "  3 services, log rotation, health checks"
+        gauge_msg 29 "[ 8/16] Regenerate Compose" "docker-compose.prod.yml (3 services, log rotation)"
         generate_prod_compose
 
-        gauge_msg 30 \
-            "PHASE 4: Regenerate Configuration" \
-            "" \
-            "Generating Dockerfile.prod..." \
-            "  4 Gunicorn workers, preloaded, no auto-reload"
+        gauge_msg 31 "[ 9/16] Regenerate Dockerfile" "Dockerfile.prod (python:3.12, 4 Gunicorn workers)"
         generate_prod_dockerfile
 
-        gauge_msg 33 \
-            "PHASE 4: Regenerate Configuration" \
-            "" \
-            "Generating nginx.conf..." \
-            "  Server: ${server_ip}, CORS, security headers"
+        gauge_msg 33 "[10/16] Regenerate Nginx" "nginx.conf (server: ${server_ip}, CORS, security)"
         generate_prod_nginx "$server_ip"
-        log "All configs regenerated"
 
-        gauge_msg 35 \
-            "PHASE 4: Regenerate Configuration  [COMPLETE]" \
-            "" \
-            "All production configs regenerated."
+        gauge_msg 35 "[10/16] Configs Ready" "All production configs regenerated."
         sleep 1
 
-        gauge_msg 36 \
-            "PHASE 5: Rebuild Containers (--no-cache)" \
-            "" \
-            "Rebuilding APP container from scratch..." \
-            "  This ensures all code changes are included." \
-            "  May take 2-5 minutes."
+        gauge_msg 36 "[11/16] Rebuild App" "Building app container --no-cache (2-5 min)..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --no-cache --progress=plain app >> "$LOG" 2>&1 &
         local build_pid=$!
         local build_pct=36
@@ -882,36 +649,19 @@ Proceed?" \
             build_pct=$((build_pct + 1))
             [ $build_pct -gt 58 ] && build_pct=58
             local last_line
-            last_line=$(tail -1 "$LOG" 2>/dev/null | sed 's/^[#0-9 ]*//' | head -c 55)
-            echo "$build_pct"
-            echo "XXX"
-            echo "PHASE 5: Rebuild Containers"
-            echo ""
-            echo "Building APP container..."
-            echo "  > ${last_line:-working...}"
-            echo "XXX"
+            last_line=$(tail -1 "$LOG" 2>/dev/null | sed 's/^[#0-9 ]*//' | head -c 50)
+            gauge_msg "$build_pct" "[11/16] Rebuild App" "> ${last_line:-working...}"
             sleep 3
         done
         wait $build_pid || true
-        log "App container rebuilt"
 
-        gauge_msg 60 \
-            "PHASE 5: Rebuild Containers" \
-            "" \
-            "Rebuilding NGINX container..."
+        gauge_msg 60 "[12/16] Rebuild Nginx" "Building nginx container..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --no-cache --progress=plain nginx >> "$LOG" 2>&1
-        log "Nginx container rebuilt"
 
-        gauge_msg 63 \
-            "PHASE 5: Rebuild Containers  [COMPLETE]" \
-            "" \
-            "All container images rebuilt."
+        gauge_msg 63 "[12/16] Build Complete" "All container images rebuilt."
         sleep 1
 
-        gauge_msg 65 \
-            "PHASE 6: Start Services" \
-            "" \
-            "Starting PostgreSQL 16..."
+        gauge_msg 65 "[13/16] Start Postgres" "Starting PostgreSQL 16..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d postgres >> "$LOG" 2>&1
         local pg_retries=0
         while [ $pg_retries -lt 10 ]; do
@@ -919,87 +669,48 @@ Proceed?" \
                 break
             fi
             pg_retries=$((pg_retries + 1))
-            gauge_msg "$((66 + pg_retries))" \
-                "PHASE 6: Start Services" \
-                "" \
-                "Waiting for PostgreSQL to accept connections..." \
-                "  Health check attempt ${pg_retries}/10"
+            gauge_msg "$((66 + pg_retries))" "[13/16] Start Postgres" "Health check attempt ${pg_retries}/10..."
             sleep 2
         done
-        log "PostgreSQL healthy"
 
-        gauge_msg 75 \
-            "PHASE 6: Start Services" \
-            "" \
-            "PostgreSQL ready. Starting Flask app..."
+        gauge_msg 75 "[13/16] Start App" "Starting Flask/Gunicorn (4 workers)..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d app >> "$LOG" 2>&1
         sleep 2
 
-        gauge_msg 78 \
-            "PHASE 6: Start Services" \
-            "" \
-            "Flask app running. Starting Nginx..."
+        gauge_msg 78 "[13/16] Start Nginx" "Starting reverse proxy on port ${PORT}..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d nginx >> "$LOG" 2>&1
         sleep 1
-        log "All services started"
 
-        gauge_msg 80 \
-            "PHASE 6: Start Services  [COMPLETE]" \
-            "" \
-            "All 3 containers running."
+        gauge_msg 80 "[13/16] Services Running" "All 3 containers started."
         sleep 1
 
-        gauge_msg 82 \
-            "PHASE 7: Cleanup" \
-            "" \
-            "Pruning unused Docker images..."
+        gauge_msg 82 "[14/16] Cleanup" "Pruning unused Docker images..."
         docker image prune -f >> "$LOG" 2>&1
 
-        gauge_msg 85 \
-            "PHASE 7: Cleanup" \
-            "" \
-            "Pruning Docker build cache..."
+        gauge_msg 85 "[14/16] Cleanup" "Pruning build cache..."
         docker builder prune -f >> "$LOG" 2>&1
 
-        gauge_msg 87 \
-            "PHASE 7: Cleanup" \
-            "" \
-            "Truncating container logs > 10MB..."
+        gauge_msg 87 "[14/16] Cleanup" "Truncating large log files..."
         find /var/lib/docker/containers/ -name "*.log" -size +10M -exec truncate -s 0 {} \; 2>/dev/null || true
-        log "Docker cleanup done"
 
-        gauge_msg 89 \
-            "PHASE 8: Verification" \
-            "" \
-            "Running health check: GET http://localhost/api/health"
+        gauge_msg 89 "[15/16] Health Check" "GET http://localhost/api/health ..."
         local retries=0
         while [ $retries -lt 20 ]; do
             if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
-                log "Health check passed"
                 break
             fi
             retries=$((retries + 1))
-            gauge_msg "$((89 + retries / 2))" \
-                "PHASE 8: Verification" \
-                "" \
-                "Waiting for application to respond..." \
-                "  Attempt ${retries}/20"
+            gauge_msg "$((89 + retries / 2))" "[15/16] Health Check" "Waiting for response (attempt ${retries}/20)..."
             sleep 2
         done
 
-        gauge_msg 98 \
-            "PHASE 8: Verification  [COMPLETE]" \
-            "" \
-            "Health check passed. Application is running."
+        gauge_msg 98 "[16/16] Verified" "Health check passed. Application is running."
         sleep 1
 
-        gauge_msg 100 \
-            "UPDATE COMPLETE" \
-            "" \
-            "All services running at http://${server_ip}"
+        gauge_msg 100 "Update complete!" "All services running at http://${server_ip}"
         sleep 1
 
-    } | whiptail --gauge "Initializing update..." 12 $WT_WIDTH 0 --title "Updating ${APP_TITLE}"
+    } | whiptail --gauge "Preparing..." 8 $WT_WIDTH 0 --title "Updating ${APP_TITLE}"
 
     # Verify data
     local store_count formula_count
