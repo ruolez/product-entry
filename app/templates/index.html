@@ -498,75 +498,29 @@
                 <span class="material-icons-round expand-icon">expand_more</span>
             </div>
             <div class="section-body">
+                <!-- All inventory fields in one flex-row - visible ones auto-flow together -->
                 <div class="flex-row">
-                    <div class="form-group">
-                        <label>On Hand</label>
-                        <input type="number" class="form-input" id="field-QuantOnHand" name="QuantOnHand" value="0">
-                    </div>
-                    <div class="form-group">
-                        <label>On Order</label>
-                        <input type="number" class="form-input" id="field-QuantOnOrder" name="QuantOnOrder" placeholder="">
-                    </div>
-                    <div class="form-group">
-                        <label>Reorder Point</label>
-                        <input type="number" class="form-input" id="field-ReorderLevel" name="ReorderLevel" value="15">
-                    </div>
-                    <div class="form-group">
-                        <label>Reorder Quantity</label>
-                        <input type="number" class="form-input" id="field-ReorderQuant" name="ReorderQuant" value="0">
-                    </div>
-                </div>
-
-                <div class="flex-row">
-                    <div class="form-group">
-                        <label>BIN Location</label>
-                        <select class="form-select" id="field-StLocationID" name="StLocationID">
-                            <option value="0">-- Select --</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Base Unit Count</label>
-                        <input type="number" class="form-input" id="field-CountInUnit" name="CountInUnit" placeholder="e.g. 75">
-                    </div>
-                </div>
-
-                <div class="flex-row">
-                    <div class="form-group">
-                        <label>Base Unit</label>
-                        <select class="form-select" id="field-UnitID" name="UnitID">
-                            <option value="14">Default (14)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Size</label>
-                        <input type="text" class="form-input" id="field-ItemSize" name="ItemSize" maxlength="10" placeholder="e.g. oz">
-                    </div>
-                    <div class="form-group">
-                        <label>Weight</label>
-                        <input type="text" class="form-input" id="field-ItemWeight" name="ItemWeight" maxlength="10" placeholder="e.g. 6">
-                    </div>
-                </div>
-
-                <!-- Unit 2 fields (shown as normal form fields) -->
-                <div class="flex-row">
+                    <div class="form-group"><label>On Hand</label><input type="number" class="form-input" id="field-QuantOnHand" name="QuantOnHand" value="0"></div>
+                    <div class="form-group"><label>On Order</label><input type="number" class="form-input" id="field-QuantOnOrder" name="QuantOnOrder" placeholder=""></div>
+                    <div class="form-group"><label>Reorder Point</label><input type="number" class="form-input" id="field-ReorderLevel" name="ReorderLevel" value="15"></div>
+                    <div class="form-group"><label>Reorder Quantity</label><input type="number" class="form-input" id="field-ReorderQuant" name="ReorderQuant" value="0"></div>
+                    <div class="form-group"><label>Base Unit Count</label><input type="number" class="form-input" id="field-CountInUnit" name="CountInUnit" placeholder="e.g. 75"></div>
+                    <div class="form-group"><label>BIN Location</label><select class="form-select" id="field-StLocationID" name="StLocationID"><option value="0">-- Select --</option></select></div>
+                    <div class="form-group"><label>Base Unit</label><select class="form-select" id="field-UnitID" name="UnitID"><option value="14">Default (14)</option></select></div>
+                    <div class="form-group"><label>Size</label><input type="text" class="form-input" id="field-ItemSize" name="ItemSize" maxlength="10" placeholder="e.g. oz"></div>
+                    <div class="form-group"><label>Weight</label><input type="text" class="form-input" id="field-ItemWeight" name="ItemWeight" maxlength="10" placeholder="e.g. 6"></div>
                     <div class="form-group"><label>Unit 2</label><select class="form-select" id="field-UnitID2" name="UnitID2"><option value="0">-- None --</option></select></div>
                     <div class="form-group"><label>Unit 2 Count</label><input type="number" class="form-input" id="field-UnitQty2" name="UnitQty2" value="0"></div>
                     <div class="form-group"><label>Unit 2 Price</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPrice2" name="UnitPrice2" value="0.00"></div></div>
                     <div class="form-group"><label>Unit 2 C&C</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceA2" name="UnitPriceA2" value="0.00"></div></div>
                     <div class="form-group"><label>Unit 2 Del A</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceB2" name="UnitPriceB2" value="0.00"></div></div>
                     <div class="form-group"><label>Unit 2 Del B</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceC2" name="UnitPriceC2" value="0.00"></div></div>
-                </div>
-                <!-- Unit 3 fields -->
-                <div class="flex-row">
                     <div class="form-group"><label>Unit 3</label><select class="form-select" id="field-UnitID3" name="UnitID3"><option value="0">-- None --</option></select></div>
                     <div class="form-group"><label>Unit 3 Count</label><input type="number" class="form-input" id="field-UnitQty3" name="UnitQty3" value="0"></div>
                     <div class="form-group"><label>Unit 3 Price</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPrice3" name="UnitPrice3" value="0.00"></div></div>
                     <div class="form-group"><label>Unit 3 C&C</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceA3" name="UnitPriceA3" value="0.00"></div></div>
                     <div class="form-group"><label>Unit 3 Del A</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceB3" name="UnitPriceB3" value="0.00"></div></div>
                     <div class="form-group"><label>Unit 3 Del B</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPriceC3" name="UnitPriceC3" value="0.00"></div></div>
-                </div>
-                <!-- Unit 4 fields -->
-                <div class="flex-row">
                     <div class="form-group"><label>Unit 4</label><select class="form-select" id="field-UnitID4" name="UnitID4"><option value="0">-- None --</option></select></div>
                     <div class="form-group"><label>Unit 4 Count</label><input type="number" class="form-input" id="field-UnitQty4" name="UnitQty4" value="0"></div>
                     <div class="form-group"><label>Unit 4 Price</label><div class="money-input-wrapper"><span class="currency-symbol">$</span><input type="number" step="0.01" class="form-input" id="field-UnitPrice4" name="UnitPrice4" value="0.00"></div></div>
