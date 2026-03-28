@@ -766,13 +766,19 @@ function applyFieldDefaults(configs) {
 
 function applyFieldVisibility(configs) {
     // Step 1: Show/hide each field's direct container
+    // Skip unit table fields here - they're handled in step 7 per-row
+    const unitTableFields = new Set([
+        "UnitID2","UnitQty2","UnitPrice2","UnitPriceA2","UnitPriceB2","UnitPriceC2",
+        "UnitID3","UnitQty3","UnitPrice3","UnitPriceA3","UnitPriceB3","UnitPriceC3",
+        "UnitID4","UnitQty4","UnitPrice4","UnitPriceA4","UnitPriceB4","UnitPriceC4",
+    ]);
     configs.forEach(fc => {
+        if (unitTableFields.has(fc.field_name)) return;
         const el = document.getElementById(`field-${fc.field_name}`);
         if (!el) return;
 
         const container = el.closest(".price-cell")
             || el.closest(".form-group")
-            || el.closest("tr")
             || el.parentElement;
         if (!container) return;
 
@@ -808,14 +814,25 @@ function applyFieldVisibility(configs) {
     const promoSection = document.getElementById("promotions-subsection");
     if (promoSection) promoSection.classList.toggle("hidden", !anyPromoVisible);
 
-    // Step 7: Hide unit conversion table if all unit2/3/4 fields hidden
-    const unitFields = ["UnitID2", "UnitQty2", "UnitPrice2", "UnitID3", "UnitQty3", "UnitPrice3", "UnitID4", "UnitQty4", "UnitPrice4"];
-    const anyUnitVisible = unitFields.some(f => {
-        const fc = configs.find(c => c.field_name === f);
-        return fc && fc.is_visible;
+    // Step 7: Unit table rows - show/hide per row, then show/hide entire table
+    const unitRows = [
+        { rowId: "unit-row-2", fields: ["UnitID2","UnitQty2","UnitPrice2","UnitPriceA2","UnitPriceB2","UnitPriceC2"] },
+        { rowId: "unit-row-3", fields: ["UnitID3","UnitQty3","UnitPrice3","UnitPriceA3","UnitPriceB3","UnitPriceC3"] },
+        { rowId: "unit-row-4", fields: ["UnitID4","UnitQty4","UnitPrice4","UnitPriceA4","UnitPriceB4","UnitPriceC4"] },
+    ];
+    let anyRowVisible = false;
+    unitRows.forEach(({ rowId, fields }) => {
+        const row = document.getElementById(rowId);
+        if (!row) return;
+        const rowHasVisible = fields.some(f => {
+            const fc = configs.find(c => c.field_name === f);
+            return fc && fc.is_visible;
+        });
+        row.classList.toggle("hidden", !rowHasVisible);
+        if (rowHasVisible) anyRowVisible = true;
     });
     const unitSection = document.getElementById("unit-table-section");
-    if (unitSection) unitSection.classList.toggle("hidden", !anyUnitVisible);
+    if (unitSection) unitSection.classList.toggle("hidden", !anyRowVisible);
 
     // Step 8: Hide inline-pricing wrapper if all pricing fields hidden
     const inlinePricing = document.getElementById("inline-pricing");
