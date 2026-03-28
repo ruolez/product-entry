@@ -89,6 +89,23 @@
         border-bottom: 2px solid var(--md-outline);
         padding-bottom: var(--md-spacing-sm);
     }
+    .field-config-row.header .sortable {
+        cursor: pointer;
+        user-select: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+    }
+    .field-config-row.header .sortable:hover {
+        color: var(--md-primary);
+    }
+    .field-config-row.header .sortable.active {
+        color: var(--md-primary);
+    }
+    .sort-arrow { font-size: 0.6rem; opacity: 0.4; }
+    .sortable.active .sort-arrow { opacity: 1; }
+    .sortable.asc .sort-arrow::after { content: "▲"; }
+    .sortable.desc .sort-arrow::after { content: "▼"; }
 
     .toggle-switch {
         position: relative;
@@ -256,12 +273,12 @@
             </button>
         </div>
         <div class="settings-section-body">
-            <div class="field-config-row header">
-                <span>Field Name</span>
+            <div class="field-config-row header" id="field-config-header">
+                <span class="sortable" data-sort="field_name">Field Name <span class="sort-arrow"></span></span>
                 <span>Display Name</span>
-                <span>Section</span>
-                <span>Visible</span>
-                <span>Required</span>
+                <span class="sortable" data-sort="section">Section <span class="sort-arrow"></span></span>
+                <span class="sortable" data-sort="is_visible">Visible <span class="sort-arrow"></span></span>
+                <span class="sortable" data-sort="is_required">Required <span class="sort-arrow"></span></span>
                 <span>Default Value</span>
             </div>
             <div id="fields-list">
@@ -280,6 +297,7 @@ import { showToast } from "/static/js/utils.js";
 let stores = [];
 let formulas = [];
 let fieldConfigs = [];
+let fieldSort = { key: null, dir: "asc" };
 
 // ── Init ──
 document.addEventListener("DOMContentLoaded", async () => {
@@ -539,8 +557,27 @@ async function loadFieldConfigs() {
 }
 
 function renderFieldConfigs() {
+    let sorted = [...fieldConfigs];
+    if (fieldSort.key) {
+        sorted.sort((a, b) => {
+            let va = a[fieldSort.key];
+            let vb = b[fieldSort.key];
+            // Booleans: true first when desc, false first when asc
+            if (typeof va === "boolean") {
+                va = va ? 1 : 0;
+                vb = vb ? 1 : 0;
+            } else {
+                va = String(va || "").toLowerCase();
+                vb = String(vb || "").toLowerCase();
+            }
+            if (va < vb) return fieldSort.dir === "asc" ? -1 : 1;
+            if (va > vb) return fieldSort.dir === "asc" ? 1 : -1;
+            return 0;
+        });
+    }
+
     const el = document.getElementById("fields-list");
-    el.innerHTML = fieldConfigs.map(fc => `
+    el.innerHTML = sorted.map(fc => `
         <div class="field-config-row" data-field="${fc.field_name}">
             <span style="font-family:var(--md-font-family); font-weight:500;">${fc.field_name}</span>
             <input type="text" class="form-input" data-cfg="display_name" value="${fc.display_name}" style="padding:4px 8px; font-size:0.8125rem;">
@@ -556,9 +593,31 @@ function renderFieldConfigs() {
             <input type="text" class="form-input" data-cfg="default_value" value="${fc.default_value || ''}" placeholder="--" style="padding:4px 8px; font-size:0.8125rem;">
         </div>
     `).join("");
+
+    // Update header sort indicators
+    document.querySelectorAll("#field-config-header .sortable").forEach(span => {
+        span.classList.remove("active", "asc", "desc");
+        if (span.dataset.sort === fieldSort.key) {
+            span.classList.add("active", fieldSort.dir);
+        }
+    });
 }
 
 function bindFieldEvents() {
+    // Sort header clicks
+    document.querySelectorAll("#field-config-header .sortable").forEach(span => {
+        span.addEventListener("click", () => {
+            const key = span.dataset.sort;
+            if (fieldSort.key === key) {
+                fieldSort.dir = fieldSort.dir === "asc" ? "desc" : "asc";
+            } else {
+                fieldSort.key = key;
+                fieldSort.dir = "asc";
+            }
+            renderFieldConfigs();
+        });
+    });
+
     document.getElementById("btn-save-fields").addEventListener("click", async () => {
         const rows = document.querySelectorAll("#fields-list .field-config-row");
         const configs = Array.from(rows).map(row => ({

@@ -765,7 +765,7 @@ function applyFieldDefaults(configs) {
 }
 
 function applyFieldVisibility(configs) {
-    // Step 1: Show/hide each field's direct container
+    // Step 1: Show/hide each field's container + update display name
     configs.forEach(fc => {
         const el = document.getElementById(`field-${fc.field_name}`);
         if (!el) return;
@@ -779,6 +779,19 @@ function applyFieldVisibility(configs) {
             container.classList.remove("hidden");
         } else {
             container.classList.add("hidden");
+        }
+
+        // Update label text from field_configs display_name
+        if (fc.display_name) {
+            const priceLabel = container.querySelector(".price-label");
+            const formLabel = container.querySelector("label:not(.form-checkbox):not(.toggle-switch)");
+            if (priceLabel) {
+                const required = fc.is_required ? ' <span class="required-mark">*</span>' : "";
+                priceLabel.innerHTML = fc.display_name + required;
+            } else if (formLabel && !formLabel.classList.contains("form-checkbox")) {
+                const required = fc.is_required ? ' <span class="required-mark">*</span>' : "";
+                formLabel.innerHTML = fc.display_name + required;
+            }
         }
     });
 
