@@ -142,12 +142,15 @@ def insert_item(data):
         # Apply defaults from field_configs for any missing fields
         merged = _apply_defaults(merged, field_configs)
 
-        # Apply price formulas for this store.
-        # calculate_prices handles skip logic internally (UnitCost always
-        # overrides for per-store adjustment, others only if not user-set).
-        # All returned results should be applied unconditionally.
-        formula_results = calculate_prices(merged, store_id)
-        merged.update(formula_results)
+        # Apply price formulas ONLY if per-store prices were NOT provided.
+        # When user sets prices per-store in the UI, those are authoritative.
+        store_fields = per_store_fields.get(sid, {})
+        has_per_store_prices = any(
+            store_fields.get(f) for f in ("UnitCost", "UnitPrice", "UnitPriceC")
+        )
+        if not has_per_store_prices:
+            formula_results = calculate_prices(merged, store_id)
+            merged.update(formula_results)
 
         try:
             sql, params = _build_insert(merged)

@@ -13,6 +13,7 @@ const state = {
     templateMode: false,
     templateProduct: null,
     templateSourceUPC: null,
+    perStorePrices: {},    // { storeId: { UnitCost, UnitPrice, UnitPriceC } }
 };
 
 // ── Init ───────────────────────────────────────────────
@@ -114,6 +115,7 @@ async function onStoreSelectionChange() {
     saveBtns.forEach(b => b.disabled = count === 0);
 
     renderCategoryTabs();
+    renderStorePriceRows();
 
     if (count > 0) {
         loadPriceFormulas();
@@ -769,6 +771,104 @@ function updateAllMargins() {
     });
 }
 
+// ── Per-Store Prices ───────────────────────────────────
+function renderStorePriceRows() {
+    const container = document.getElementById("store-price-rows");
+    const section = document.getElementById("store-prices-section");
+    if (!container || !section) return;
+
+    // Hide in template mode
+    if (state.templateMode) {
+        section.classList.add("hidden");
+        return;
+    }
+
+    if (state.selectedStoreIds.length === 0) {
+        section.classList.add("hidden");
+        return;
+    }
+
+    section.classList.remove("hidden");
+
+    container.innerHTML = state.selectedStoreIds.map(sid => {
+        const store = state.stores.find(s => s.id === sid);
+        const name = store?.name || sid;
+        const prices = state.perStorePrices[sid] || {};
+        return `
+            <div class="store-price-row" data-store-id="${sid}">
+                <span class="spr-name" title="${name}">${name}</span>
+                <div class="spr-field">
+                    <div class="money-input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="number" step="0.01" min="0" class="form-input" data-spr="UnitCost" value="${prices.UnitCost || ""}" placeholder="Cost">
+                    </div>
+                </div>
+                <div class="spr-field">
+                    <div class="money-input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="number" step="0.01" min="0" class="form-input" data-spr="UnitPrice" value="${prices.UnitPrice || ""}" placeholder="Price">
+                    </div>
+                </div>
+                <div class="spr-field">
+                    <div class="money-input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="number" step="0.01" min="0" class="form-input" data-spr="UnitPriceC" value="${prices.UnitPriceC || ""}" placeholder="Del B">
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    // Bind input changes to state
+    container.querySelectorAll(".store-price-row").forEach(row => {
+        const sid = parseInt(row.dataset.storeId);
+        row.querySelectorAll("input[data-spr]").forEach(input => {
+            input.addEventListener("change", () => {
+                if (!state.perStorePrices[sid]) state.perStorePrices[sid] = {};
+                state.perStorePrices[sid][input.dataset.spr] = input.value;
+            });
+        });
+    });
+}
+
+function copyPricesToStores() {
+    const baseCost = parseFloat(document.getElementById("field-UnitCost")?.value) || 0;
+    const basePrice = parseFloat(document.getElementById("field-UnitPrice")?.value) || 0;
+    const baseDelB = parseFloat(document.getElementById("field-UnitPriceC")?.value) || 0;
+
+    if (baseCost <= 0) {
+        showToast("Enter a base cost first", "warning");
+        return;
+    }
+
+    state.selectedStoreIds.forEach(sid => {
+        const formulas = state.priceFormulas[String(sid)] || [];
+        const prices = { UnitCost: baseCost, UnitPrice: basePrice, UnitPriceC: baseDelB };
+
+        // Apply formulas for this store if they exist
+        for (const f of formulas) {
+            const operand = parseFloat(f.operand);
+            let value;
+            if (f.operator === "multiply") value = baseCost * operand;
+            else if (f.operator === "add") value = baseCost + operand;
+            else if (f.operator === "fixed") value = operand;
+            else continue;
+            prices[f.target_field] = parseFloat(value.toFixed(2));
+        }
+
+        state.perStorePrices[sid] = {
+            UnitCost: prices.UnitCost.toFixed(2),
+            UnitPrice: prices.UnitPrice.toFixed(2),
+            UnitPriceC: prices.UnitPriceC.toFixed(2),
+        };
+    });
+
+    renderStorePriceRows();
+    showToast("Prices copied to all stores", "success");
+}
+
+document.getElementById("btn-copy-prices")?.addEventListener("click", copyPricesToStores);
+
 // ── Validation ─────────────────────────────────────────
 function bindValidation() {
     const upcField = document.getElementById("field-ProductUPC");
@@ -921,12 +1021,22 @@ function collectFormData() {
     const perStoreFields = {};
     state.selectedStoreIds.forEach(sid => {
         const data = state.perStoreData[sid] || {};
-        perStoreFields[sid] = {
+        const storeFields = {
             CateID: data.CateID,
             SubCateID: data.SubCateID,
             ManuID: data.ManuID || 0,
             UnitID: data.UnitID || 0,
         };
+
+        // Include per-store prices if set
+        const sp = state.perStorePrices[sid];
+        if (sp) {
+            if (sp.UnitCost) storeFields.UnitCost = sp.UnitCost;
+            if (sp.UnitPrice) storeFields.UnitPrice = sp.UnitPrice;
+            if (sp.UnitPriceC) storeFields.UnitPriceC = sp.UnitPriceC;
+        }
+
+        perStoreFields[sid] = storeFields;
     });
 
     return {
@@ -1028,9 +1138,11 @@ function clearForm() {
     setFieldStatus("ProductSKU", "hidden");
 
     state.perStoreData = {};
+    state.perStorePrices = {};
     clearCategoryBreadcrumb();
     document.getElementById("subcategory-search").value = "";
     renderCategoryTabs();
+    renderStorePriceRows();
     applyFieldDefaults(state.fieldConfigs);
     applyFieldVisibility(state.fieldConfigs);
 
