@@ -282,6 +282,14 @@ def insert_sibling_item(data):
         merged["QuantOnHand"] = 0
         merged["QuantOnOrder"] = None
 
+        # Apply per-store price overrides if provided
+        per_store_prices = data.get("per_store_prices", {})
+        store_prices = per_store_prices.get(str(store_id), {})
+        for price_field in ("UnitCost", "UnitPrice", "UnitPriceC"):
+            val = store_prices.get(price_field)
+            if val is not None and val != "":
+                merged[price_field] = val
+
         try:
             sql, params = _build_insert(merged)
             product_id = execute_insert(store_id, sql, params)

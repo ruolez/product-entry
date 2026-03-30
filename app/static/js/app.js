@@ -1081,6 +1081,20 @@ async function saveItem(andNew = false) {
                     ProductSKU: document.getElementById("field-ProductSKU")?.value?.trim(),
                     ProductDescription: document.getElementById("field-ProductDescription")?.value?.trim(),
                 },
+                per_store_prices: (() => {
+                    const prices = {};
+                    state.selectedStoreIds.forEach(sid => {
+                        const sp = state.perStorePrices[sid];
+                        if (sp) {
+                            prices[String(sid)] = {
+                                UnitCost: sp.UnitCost || null,
+                                UnitPrice: sp.UnitPrice || null,
+                                UnitPriceC: sp.UnitPriceC || null,
+                            };
+                        }
+                    });
+                    return prices;
+                })(),
             };
         } else {
             data = collectFormData();
