@@ -78,12 +78,7 @@ def search_products(store_id, query):
 def get_product_by_upc(store_id, upc):
     rows = execute_query(
         store_id,
-        "SELECT ProductID, ProductUPC, ProductSKU, ProductDescription, "
-        "CateID, SubCateID, ManuID, UnitCost, UnitPrice, UnitPriceA, UnitPriceB, UnitPriceC, "
-        "MSRPrice, ProductType, ValuationMethod, ItemTaxID, BarcodeFormat, "
-        "SPPromoted, CountInUnit, ItemSize, ItemWeight, UnitID, UnitQty2, "
-        "ReorderLevel, ReorderQuant "
-        "FROM Items_tbl WHERE ProductUPC = %s",
+        "SELECT * FROM Items_tbl WHERE ProductUPC = %s",
         (upc,),
     )
     return rows[0] if rows else None
