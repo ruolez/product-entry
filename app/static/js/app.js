@@ -790,7 +790,14 @@ function renderStorePriceRows() {
 
     section.classList.remove("hidden");
 
-    container.innerHTML = state.selectedStoreIds.map(sid => {
+    container.innerHTML = `
+        <div class="store-price-row spr-header">
+            <span class="spr-name"></span>
+            <div class="spr-field"><span class="spr-col-label">Cost</span></div>
+            <div class="spr-field"><span class="spr-col-label">Price</span></div>
+            <div class="spr-field"><span class="spr-col-label">Delivery B</span></div>
+        </div>
+    ` + state.selectedStoreIds.map(sid => {
         const store = state.stores.find(s => s.id === sid);
         const name = store?.name || sid;
         const prices = state.perStorePrices[sid] || {};
