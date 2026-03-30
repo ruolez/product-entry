@@ -602,6 +602,13 @@ async function lookupSourceInAllStores(sourceUPC) {
                 state.perStoreData[sid].UnitID = product.UnitID;
                 state.perStoreData[sid]._matched = true;
 
+                // Populate per-store prices from the matched product
+                state.perStorePrices[sid] = {
+                    UnitCost: product.UnitCost != null ? parseFloat(product.UnitCost).toFixed(2) : "",
+                    UnitPrice: product.UnitPrice != null ? parseFloat(product.UnitPrice).toFixed(2) : "",
+                    UnitPriceC: product.UnitPriceC != null ? parseFloat(product.UnitPriceC).toFixed(2) : "",
+                };
+
                 // Resolve subcategory name for breadcrumb display
                 const allSubs = await getCachedLookup("all-subcategories", sid);
                 const sub = allSubs.find(s => s.SubCateID === product.SubCateID);
@@ -625,6 +632,7 @@ async function lookupSourceInAllStores(sourceUPC) {
         }
 
         renderCategoryTabs();
+        renderStorePriceRows();
 
         if (notFound.length > 0) {
             showToast(`Source product not found in: ${notFound.join(", ")}. These stores will be skipped on save.`, "warning", 8000);
@@ -776,12 +784,6 @@ function renderStorePriceRows() {
     const container = document.getElementById("store-price-rows");
     const section = document.getElementById("store-prices-section");
     if (!container || !section) return;
-
-    // Hide in template mode
-    if (state.templateMode) {
-        section.classList.add("hidden");
-        return;
-    }
 
     if (state.selectedStoreIds.length === 0) {
         section.classList.add("hidden");
