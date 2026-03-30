@@ -319,11 +319,19 @@
                                 <span class="material-icons-round" style="font-size:14px;">close</span>
                             </button>
                         </div>
-                        <div class="form-group" style="margin-top: var(--md-spacing-md);">
-                            <label>Manufacturer</label>
-                            <select class="form-select" id="field-ManuID" name="ManuID">
-                                <option value="0">-- Select --</option>
-                            </select>
+                        <div style="display:flex; gap:var(--md-spacing-sm); margin-top:var(--md-spacing-md);">
+                            <div class="form-group" style="flex:1;">
+                                <label>Manufacturer</label>
+                                <select class="form-select" id="field-ManuID" name="ManuID">
+                                    <option value="0">-- Select --</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label>Unit of Measure</label>
+                                <select class="form-select" id="field-UnitID" name="UnitID">
+                                    <option value="0">-- Select --</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
@@ -543,7 +551,6 @@
                     <div class="form-group"><label>Reorder Quantity</label><input type="number" class="form-input" id="field-ReorderQuant" name="ReorderQuant" value="0"></div>
                     <div class="form-group"><label>Base Unit Count</label><input type="number" class="form-input" id="field-CountInUnit" name="CountInUnit" placeholder="e.g. 75"></div>
                     <div class="form-group"><label>BIN Location</label><select class="form-select" id="field-StLocationID" name="StLocationID"><option value="0">-- Select --</option></select></div>
-                    <div class="form-group"><label>Base Unit</label><select class="form-select" id="field-UnitID" name="UnitID"><option value="14">Default (14)</option></select></div>
                     <div class="form-group"><label>Size</label><input type="text" class="form-input" id="field-ItemSize" name="ItemSize" maxlength="10" placeholder="e.g. oz"></div>
                     <div class="form-group"><label>Weight</label><input type="text" class="form-input" id="field-ItemWeight" name="ItemWeight" maxlength="10" placeholder="e.g. 6"></div>
                     <div class="form-group"><label>Unit 2</label><select class="form-select" id="field-UnitID2" name="UnitID2"><option value="0">-- None --</option></select></div>

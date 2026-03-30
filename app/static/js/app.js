@@ -7,7 +7,7 @@ const state = {
     selectedStoreIds: [],
     fieldConfigs: [],
     priceFormulas: {},           // { storeId: [ {target_field, operator, operand} ] }
-    perStoreData: {},      // { storeId: { CateID, SubCateID, ManuID } }
+    perStoreData: {},      // { storeId: { CateID, SubCateID, ManuID, UnitID } }
     activeCategoryStoreId: null, // which store's categories are showing
     lookupCache: {},             // { "categories-1": [...], "subcategories-1-5": [...] }
     templateMode: false,
@@ -168,16 +168,21 @@ async function switchCategoryStore(storeId) {
     });
 
     const manuSelect = document.getElementById("field-ManuID");
+    const unitSelect = document.getElementById("field-UnitID");
     const searchInput = document.getElementById("subcategory-search");
 
-    // Load all subcategories (with parent category) and manufacturers in parallel
-    const [allSubs, manufacturers] = await Promise.all([
+    // Load all subcategories, manufacturers, and units in parallel
+    const [allSubs, manufacturers, units] = await Promise.all([
         getCachedLookup("all-subcategories", storeId),
         getCachedLookup("manufacturers", storeId),
+        getCachedLookup("units", storeId),
     ]);
 
     manuSelect.innerHTML = '<option value="0">-- Select --</option>' +
         manufacturers.map(m => `<option value="${m.ManufacturerID}">${m.ManuName}</option>`).join("");
+
+    unitSelect.innerHTML = '<option value="0">-- Select --</option>' +
+        units.map(u => `<option value="${u.UnitID}">${u.UnitDesc}</option>`).join("");
 
     // Restore saved values for this store
     const saved = state.perStoreData[storeId];
@@ -191,9 +196,8 @@ async function switchCategoryStore(storeId) {
         clearCategoryBreadcrumb();
         searchInput.value = "";
     }
-    if (saved?.ManuID) {
-        manuSelect.value = saved.ManuID;
-    }
+    if (saved?.ManuID) manuSelect.value = saved.ManuID;
+    if (saved?.UnitID) unitSelect.value = saved.UnitID;
     state._switchingStore = false;
 }
 
@@ -368,6 +372,13 @@ document.getElementById("field-ManuID")?.addEventListener("change", (e) => {
     if (!storeId) return;
     if (!state.perStoreData[storeId]) state.perStoreData[storeId] = {};
     state.perStoreData[storeId].ManuID = parseInt(e.target.value) || null;
+});
+
+document.getElementById("field-UnitID")?.addEventListener("change", (e) => {
+    const storeId = state.activeCategoryStoreId;
+    if (!storeId) return;
+    if (!state.perStoreData[storeId]) state.perStoreData[storeId] = {};
+    state.perStoreData[storeId].UnitID = parseInt(e.target.value) || null;
 });
 
 // Apply to All
@@ -586,6 +597,7 @@ async function lookupSourceInAllStores(sourceUPC) {
                 state.perStoreData[sid].CateID = product.CateID;
                 state.perStoreData[sid].SubCateID = product.SubCateID;
                 state.perStoreData[sid].ManuID = product.ManuID;
+                state.perStoreData[sid].UnitID = product.UnitID;
                 state.perStoreData[sid]._matched = true;
 
                 // Resolve subcategory name for breadcrumb display
@@ -666,7 +678,6 @@ async function loadLookupData(storeId) {
     ]);
 
     populateSelect("field-ItemTaxID", taxes, "TaxID", "TaxName", "0", "None");
-    populateSelect("field-UnitID", units, "UnitID", "UnitDesc", "14");
     populateSelect("field-UnitID2", units, "UnitID", "UnitDesc", "0", "-- None --");
     populateSelect("field-UnitID3", units, "UnitID", "UnitDesc", "0", "-- None --");
     populateSelect("field-UnitID4", units, "UnitID", "UnitDesc", "0", "-- None --");
@@ -896,7 +907,7 @@ function collectFormData() {
     };
 
     const commonFields = {};
-    const perStoreFieldNames = ["CateID", "SubCateID", "ManuID"];
+    const perStoreFieldNames = ["CateID", "SubCateID", "ManuID", "UnitID"];
 
     state.fieldConfigs.forEach(fc => {
         if (perStoreFieldNames.includes(fc.field_name) || !fc.is_visible) return;
@@ -914,6 +925,7 @@ function collectFormData() {
             CateID: data.CateID,
             SubCateID: data.SubCateID,
             ManuID: data.ManuID || 0,
+            UnitID: data.UnitID || 0,
         };
     });
 

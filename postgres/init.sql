@@ -111,7 +111,7 @@ INSERT INTO field_configs (field_name, display_name, section, field_type, is_vis
 ('CountInUnit',    'Base Unit Count',   'inventory', 'number', TRUE,  FALSE, FALSE, NULL,   NULL, 70, 'Units per base container'),
 ('ItemSize',       'Size',              'inventory', 'text',   TRUE,  FALSE, FALSE, NULL,   10,  80, 'Size descriptor (e.g. oz, ml)'),
 ('ItemWeight',     'Weight',            'inventory', 'text',   TRUE,  FALSE, FALSE, NULL,   10,  90, 'Weight descriptor'),
-('UnitID',         'Base Unit',         'inventory', 'select', TRUE,  FALSE, FALSE, '14',   NULL, 100, 'Base unit of measure'),
+('UnitID',         'Base Unit',         'inventory', 'select', TRUE,  FALSE, TRUE,  '14',   NULL, 100, 'Base unit of measure - may differ per store'),
 ('UnitID2',        'Unit 2',            'inventory', 'select', TRUE,  FALSE, FALSE, '0',    NULL, 110, 'Second unit of measure'),
 ('UnitQty2',       'Unit 2 Count',      'inventory', 'number', TRUE,  FALSE, FALSE, '0',    NULL, 120, 'Quantity per Unit 2'),
 ('UnitPrice2',     'Unit 2 Price',      'inventory', 'money',  TRUE,  FALSE, FALSE, '0.00', NULL, 130, 'Unit 2 standard price'),
