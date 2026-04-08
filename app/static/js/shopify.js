@@ -108,23 +108,24 @@ async function onStoreSelectionChange() {
 
     for (const sid of state.selectedStoreIds) {
         if (!state.collections[sid]) {
+            const safe = (promise) => promise.catch(() => null);
             try {
                 const [cols, locs, pubs, wmInfo, vendors, types, tags] = await Promise.all([
-                    api.get(`/api/shopify/stores/${sid}/collections`),
-                    api.get(`/api/shopify/stores/${sid}/locations`),
-                    api.get(`/api/shopify/stores/${sid}/publications`),
-                    api.get(`/api/shopify/stores/${sid}/watermark-info`),
-                    api.get(`/api/shopify/stores/${sid}/vendors`),
-                    api.get(`/api/shopify/stores/${sid}/product-types`),
-                    api.get(`/api/shopify/stores/${sid}/tags`),
+                    safe(api.get(`/api/shopify/stores/${sid}/collections`)),
+                    safe(api.get(`/api/shopify/stores/${sid}/locations`)),
+                    safe(api.get(`/api/shopify/stores/${sid}/publications`)),
+                    safe(api.get(`/api/shopify/stores/${sid}/watermark-info`)),
+                    safe(api.get(`/api/shopify/stores/${sid}/vendors`)),
+                    safe(api.get(`/api/shopify/stores/${sid}/product-types`)),
+                    safe(api.get(`/api/shopify/stores/${sid}/tags`)),
                 ]);
-                state.collections[sid] = cols;
-                state.locations[sid] = locs;
-                state.publications[sid] = pubs;
-                state.watermarkInfo[sid] = wmInfo;
-                for (const v of vendors) { if (!state.vendors.includes(v)) state.vendors.push(v); }
-                for (const t of types) { if (!state.productTypes.includes(t)) state.productTypes.push(t); }
-                for (const t of tags) { if (!state.existingTags.includes(t)) state.existingTags.push(t); }
+                state.collections[sid] = cols || [];
+                state.locations[sid] = locs || [];
+                state.publications[sid] = pubs || [];
+                state.watermarkInfo[sid] = wmInfo || {};
+                for (const v of (vendors || [])) { if (!state.vendors.includes(v)) state.vendors.push(v); }
+                for (const t of (types || [])) { if (!state.productTypes.includes(t)) state.productTypes.push(t); }
+                for (const t of (tags || [])) { if (!state.existingTags.includes(t)) state.existingTags.push(t); }
             } catch (err) {
                 showToast(`Failed to load data for store ${sid}: ${err.message}`, "error");
             }

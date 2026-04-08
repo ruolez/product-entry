@@ -152,34 +152,30 @@ def get_product_types(store_id):
 def get_vendors(store_id):
     query = """
     {
-        shop {
-            productVendors(first: 250) {
-                edges {
-                    node
-                }
+        productVendors(first: 250) {
+            edges {
+                node
             }
         }
     }
     """
     data = execute_graphql(store_id, query)
-    edges = data.get("shop", {}).get("productVendors", {}).get("edges", [])
+    edges = data.get("productVendors", {}).get("edges", [])
     return [edge["node"] for edge in edges]
 
 
 def get_tags(store_id):
     query = """
     {
-        shop {
-            productTags(first: 250) {
-                edges {
-                    node
-                }
+        productTags(first: 250) {
+            edges {
+                node
             }
         }
     }
     """
     data = execute_graphql(store_id, query)
-    edges = data.get("shop", {}).get("productTags", {}).get("edges", [])
+    edges = data.get("productTags", {}).get("edges", [])
     return [edge["node"] for edge in edges]
 
 
