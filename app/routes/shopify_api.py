@@ -11,6 +11,7 @@ from services.shopify_service import (
     get_product_types,
     get_vendors,
     get_tags,
+    get_store_data,
     push_to_stores,
 )
 from services.shopify_image_service import (
@@ -65,6 +66,15 @@ def store_product_types(store_id):
     try:
         types = get_product_types(store_id)
         return jsonify(types)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@shopify_bp.route("/stores/<int:store_id>/store-data")
+def store_data(store_id):
+    try:
+        data = get_store_data(store_id)
+        return jsonify(data)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

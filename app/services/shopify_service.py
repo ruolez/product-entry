@@ -5,7 +5,7 @@ from models.settings import db
 from services.store_connection import decrypt_password
 
 
-SHOPIFY_API_VERSION = "2025-04"
+SHOPIFY_API_VERSION = "2024-10"
 
 
 def get_all_shopify_stores(active_only=True):
@@ -35,8 +35,12 @@ def _build_client(store):
     return store_url, token
 
 
-def _graphql_url(store_url):
-    return f"{store_url}/admin/api/{SHOPIFY_API_VERSION}/graphql.json"
+_API_VERSIONS = ["2024-10", "2024-07", "2024-04"]
+
+
+def _graphql_url(store_url, version=None):
+    v = version or SHOPIFY_API_VERSION
+    return f"{store_url}/admin/api/{v}/graphql.json"
 
 
 def execute_graphql(store_id, query, variables=None):
@@ -45,37 +49,112 @@ def execute_graphql(store_id, query, variables=None):
         raise ValueError(f"Shopify store {store_id} not found")
 
     store_url, token = _build_client(store)
-    url = _graphql_url(store_url)
-
+    headers = {
+        "X-Shopify-Access-Token": token,
+        "Content-Type": "application/json",
+    }
     payload = {"query": query}
     if variables:
         payload["variables"] = variables
 
-    with httpx.Client(timeout=30) as client:
-        resp = client.post(
-            url,
-            json=payload,
-            headers={
-                "X-Shopify-Access-Token": token,
-                "Content-Type": "application/json",
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
+    last_error = None
+    for version in _API_VERSIONS:
+        url = _graphql_url(store_url, version)
+        try:
+            with httpx.Client(timeout=30) as client:
+                resp = client.post(url, json=payload, headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
 
-    if "errors" in data:
-        raise RuntimeError(f"GraphQL errors: {data['errors']}")
+            if "errors" in data:
+                last_error = RuntimeError(f"GraphQL errors: {data['errors']}")
+                continue
 
-    return data.get("data", {})
+            return data.get("data", {})
+        except httpx.HTTPStatusError:
+            last_error = RuntimeError(f"HTTP {resp.status_code} from {version}")
+            continue
+        except Exception as e:
+            last_error = e
+            continue
+
+    raise last_error or RuntimeError("All API versions failed")
 
 
 def test_shopify_connection(store_id):
     try:
-        data = execute_graphql(store_id, "{ shop { name myshopifyDomain } }")
+        data = execute_graphql(
+            store_id,
+            "{ shop { name myshopifyDomain } productTypes(first: 1) { nodes } }"
+        )
         shop = data.get("shop", {})
-        return True, f"Connected to {shop.get('name', 'unknown')}"
+        has_products_scope = "productTypes" in data
+        msg = f"Connected to {shop.get('name', 'unknown')}"
+        if has_products_scope:
+            msg += " (read_products scope OK)"
+        else:
+            msg += " (WARNING: read_products scope may be missing)"
+        return True, msg
     except Exception as e:
         return False, str(e)
+
+
+def get_store_data(store_id):
+    result = {
+        "vendors": [], "tags": [], "productTypes": [],
+        "collections": [], "locations": [], "publications": [],
+        "errors": {},
+    }
+
+    # Try consolidated query first
+    consolidated_query = """
+    {
+        productVendors(first: 250) { nodes }
+        productTags(first: 250) { nodes }
+        productTypes(first: 250) { nodes }
+        collections(first: 250) { nodes { id title handle } }
+        locations(first: 50) { nodes { id name isActive } }
+    }
+    """
+    try:
+        data = execute_graphql(store_id, consolidated_query)
+        result["vendors"] = data.get("productVendors", {}).get("nodes", [])
+        result["tags"] = data.get("productTags", {}).get("nodes", [])
+        result["productTypes"] = data.get("productTypes", {}).get("nodes", [])
+        result["collections"] = data.get("collections", {}).get("nodes", [])
+        all_locations = data.get("locations", {}).get("nodes", [])
+        result["locations"] = [loc for loc in all_locations if loc.get("isActive", True)]
+    except Exception as e:
+        result["errors"]["consolidated"] = str(e)
+        # Fall back to individual queries
+        for field, query, parser in [
+            ("vendors", "{ productVendors(first: 250) { nodes } }",
+             lambda d: d.get("productVendors", {}).get("nodes", [])),
+            ("tags", "{ productTags(first: 250) { nodes } }",
+             lambda d: d.get("productTags", {}).get("nodes", [])),
+            ("productTypes", "{ productTypes(first: 250) { nodes } }",
+             lambda d: d.get("productTypes", {}).get("nodes", [])),
+            ("collections", "{ collections(first: 250) { nodes { id title handle } } }",
+             lambda d: d.get("collections", {}).get("nodes", [])),
+            ("locations", "{ locations(first: 50) { nodes { id name isActive } } }",
+             lambda d: [l for l in d.get("locations", {}).get("nodes", []) if l.get("isActive", True)]),
+        ]:
+            try:
+                data = execute_graphql(store_id, query)
+                result[field] = parser(data)
+            except Exception as ex:
+                result["errors"][field] = str(ex)
+
+    # Publications need read_publications scope - separate query
+    try:
+        pub_data = execute_graphql(
+            store_id, "{ publications(first: 50) { nodes { id name } } }"
+        )
+        result["publications"] = pub_data.get("publications", {}).get("nodes", [])
+    except Exception as e:
+        result["errors"]["publications"] = str(e)
+
+    return result
 
 
 def get_collections(store_id):

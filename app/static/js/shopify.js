@@ -50,8 +50,6 @@ async function initShopifyOnce() {
     bindMetafieldEvents();
     bindTagInput();
     bindCollectionsSearch();
-    bindAutocomplete("sp-product-type", "sp-product-type-dropdown", () => state.productTypes, null);
-    bindAutocomplete("sp-vendor", "sp-vendor-dropdown", () => state.vendors, null);
     bindSeoSync();
     bindActionButtons();
 }
@@ -107,38 +105,58 @@ async function onStoreSelectionChange() {
     document.getElementById("sp-btn-save").disabled = count === 0;
 
     for (const sid of state.selectedStoreIds) {
-        if (state._loaded && state._loaded[sid]) continue;
-        const safe = (label, promise) => promise.catch(err => {
-            console.warn(`Shopify ${label} failed for store ${sid}:`, err.message || err);
-            return null;
-        });
+        if (state._loaded?.[sid]) continue;
         try {
-            const [cols, locs, pubs, wmInfo, vendors, types, tags] = await Promise.all([
-                safe("collections", api.get(`/api/shopify/stores/${sid}/collections`)),
-                safe("locations", api.get(`/api/shopify/stores/${sid}/locations`)),
-                safe("publications", api.get(`/api/shopify/stores/${sid}/publications`)),
-                safe("watermark", api.get(`/api/shopify/stores/${sid}/watermark-info`)),
-                safe("vendors", api.get(`/api/shopify/stores/${sid}/vendors`)),
-                safe("product-types", api.get(`/api/shopify/stores/${sid}/product-types`)),
-                safe("tags", api.get(`/api/shopify/stores/${sid}/tags`)),
+            const [storeData, wmInfo] = await Promise.all([
+                api.get(`/api/shopify/stores/${sid}/store-data`),
+                api.get(`/api/shopify/stores/${sid}/watermark-info`).catch(() => ({})),
             ]);
-            state.collections[sid] = cols || [];
-            state.locations[sid] = locs || [];
-            state.publications[sid] = pubs || [];
+
+            state.collections[sid] = storeData.collections || [];
+            state.locations[sid] = storeData.locations || [];
+            state.publications[sid] = storeData.publications || [];
             state.watermarkInfo[sid] = wmInfo || {};
-            for (const v of (vendors || [])) { if (!state.vendors.includes(v)) state.vendors.push(v); }
-            for (const t of (types || [])) { if (!state.productTypes.includes(t)) state.productTypes.push(t); }
-            for (const t of (tags || [])) { if (!state.existingTags.includes(t)) state.existingTags.push(t); }
+
+            for (const v of (storeData.vendors || [])) {
+                if (!state.vendors.includes(v)) state.vendors.push(v);
+            }
+            for (const t of (storeData.productTypes || [])) {
+                if (!state.productTypes.includes(t)) state.productTypes.push(t);
+            }
+            for (const t of (storeData.tags || [])) {
+                if (!state.existingTags.includes(t)) state.existingTags.push(t);
+            }
+
+            if (storeData.errors && Object.keys(storeData.errors).length) {
+                const store = state.stores.find(s => s.id === sid);
+                const name = store?.name || sid;
+                for (const [field, msg] of Object.entries(storeData.errors)) {
+                    console.warn(`Shopify ${field} failed for ${name}:`, msg);
+                }
+                const failedFields = Object.keys(storeData.errors).join(", ");
+                showToast(`${name}: Failed to load ${failedFields}. Check API token scopes.`, "warning", 8000);
+            }
+
             if (!state._loaded) state._loaded = {};
             state._loaded[sid] = true;
         } catch (err) {
-            showToast(`Failed to load data for store ${sid}: ${err.message}`, "error");
+            const store = state.stores.find(s => s.id === sid);
+            const name = store?.name || sid;
+            showToast(`Failed to load ${name}: ${err.message}`, "error");
+            console.error(`Store data load failed for ${name}:`, err);
         }
     }
+
     renderInventoryLocations();
     renderPublications();
     renderPerStoreMediaUI();
     renderWatermarkPreviews();
+    rebindAutocompletes();
+}
+
+function rebindAutocompletes() {
+    bindAutocomplete("sp-product-type", "sp-product-type-dropdown", () => state.productTypes, null);
+    bindAutocomplete("sp-vendor", "sp-vendor-dropdown", () => state.vendors, null);
 }
 
 // ── Quill Editor ───────────────────────────────────────
@@ -392,10 +410,21 @@ function renderWatermarkPreviews() {
 }
 
 // ── Generic Autocomplete ───────────────────────────────
+const _acBound = {};
+
 function bindAutocomplete(inputId, dropdownId, getItems, onSelect) {
     const input = document.getElementById(inputId);
     const dropdown = document.getElementById(dropdownId);
     if (!input || !dropdown) return;
+
+    // Remove old listeners if rebinding
+    if (_acBound[inputId]) {
+        const old = _acBound[inputId];
+        input.removeEventListener("input", old.onInput);
+        input.removeEventListener("keydown", old.onKeydown);
+        input.removeEventListener("blur", old.onBlur);
+        input.removeEventListener("focus", old.onFocus);
+    }
 
     let activeIndex = -1;
 
@@ -408,6 +437,10 @@ function bindAutocomplete(inputId, dropdownId, getItems, onSelect) {
 
         if (!filtered.length) {
             dropdown.classList.add("hidden");
+            if (q && items.length === 0) {
+                dropdown.innerHTML = '<div class="autocomplete-item" style="color:var(--md-on-surface-variant);cursor:default;"><span class="ac-subcat">No data loaded — select a store first</span></div>';
+                dropdown.classList.remove("hidden");
+            }
             activeIndex = -1;
             return;
         }
@@ -419,7 +452,7 @@ function bindAutocomplete(inputId, dropdownId, getItems, onSelect) {
         `).join("");
         dropdown.classList.remove("hidden");
 
-        dropdown.querySelectorAll(".autocomplete-item").forEach(el => {
+        dropdown.querySelectorAll(".autocomplete-item[data-value]").forEach(el => {
             el.addEventListener("mousedown", (e) => {
                 e.preventDefault();
                 input.value = el.dataset.value;
@@ -429,13 +462,13 @@ function bindAutocomplete(inputId, dropdownId, getItems, onSelect) {
         });
     }
 
-    input.addEventListener("input", debounce(() => {
+    const onInput = debounce(() => {
         activeIndex = -1;
         render(input.value.trim());
-    }, 150));
+    }, 150);
 
-    input.addEventListener("keydown", (e) => {
-        const items = dropdown.querySelectorAll(".autocomplete-item");
+    const onKeydown = (e) => {
+        const items = dropdown.querySelectorAll(".autocomplete-item[data-value]");
         if (!items.length) return;
 
         if (e.key === "ArrowDown") {
@@ -456,15 +489,22 @@ function bindAutocomplete(inputId, dropdownId, getItems, onSelect) {
             dropdown.classList.add("hidden");
             activeIndex = -1;
         }
-    });
+    };
 
-    input.addEventListener("blur", () => {
-        setTimeout(() => { dropdown.classList.add("hidden"); activeIndex = -1; }, 150);
-    });
+    const onBlur = () => {
+        setTimeout(() => { dropdown.classList.add("hidden"); activeIndex = -1; }, 200);
+    };
 
-    input.addEventListener("focus", () => {
+    const onFocus = () => {
         if (input.value.trim()) render(input.value.trim());
-    });
+    };
+
+    input.addEventListener("input", onInput);
+    input.addEventListener("keydown", onKeydown);
+    input.addEventListener("blur", onBlur);
+    input.addEventListener("focus", onFocus);
+
+    _acBound[inputId] = { onInput, onKeydown, onBlur, onFocus };
 }
 
 function highlightMatch(text, query) {
