@@ -70,6 +70,39 @@ def store_product_types(store_id):
         return jsonify({"error": str(e)}), 500
 
 
+@shopify_bp.route("/debug")
+def debug_all_stores():
+    from services.shopify_service import test_shopify_connection
+    stores = get_all_shopify_stores(active_only=False)
+    results = []
+    for s in stores:
+        entry = {"id": s["id"], "name": s["name"], "store_url": s["store_url"], "is_active": s["is_active"]}
+        try:
+            ok, msg = test_shopify_connection(s["id"])
+            entry["connection"] = {"success": ok, "message": msg}
+        except Exception as e:
+            entry["connection"] = {"success": False, "message": str(e)}
+        if entry["connection"]["success"]:
+            try:
+                data = get_store_data(s["id"])
+                entry["data"] = {
+                    "vendors_count": len(data.get("vendors", [])),
+                    "vendors_sample": data.get("vendors", [])[:5],
+                    "tags_count": len(data.get("tags", [])),
+                    "tags_sample": data.get("tags", [])[:5],
+                    "productTypes_count": len(data.get("productTypes", [])),
+                    "productTypes_sample": data.get("productTypes", [])[:5],
+                    "collections_count": len(data.get("collections", [])),
+                    "locations_count": len(data.get("locations", [])),
+                    "publications_count": len(data.get("publications", [])),
+                    "errors": data.get("errors", {}),
+                }
+            except Exception as e:
+                entry["data_error"] = str(e)
+        results.append(entry)
+    return jsonify(results)
+
+
 @shopify_bp.route("/stores/<int:store_id>/store-data")
 def store_data(store_id):
     try:
