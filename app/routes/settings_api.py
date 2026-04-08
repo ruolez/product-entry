@@ -348,3 +348,42 @@ def get_shopify_watermark_preview(store_id):
 
     img_b64 = base64.b64encode(store["watermark_image"]).decode()
     return jsonify({"watermark_base64": img_b64})
+
+
+# --- App Settings ---
+
+@settings_bp.route("/app-settings")
+def list_app_settings():
+    result = db.session.execute(db.text("SELECT key, value FROM app_settings"))
+    rows = result.mappings().all()
+    return jsonify({r["key"]: r["value"] for r in rows})
+
+
+@settings_bp.route("/app-settings/<key>")
+def get_app_setting(key):
+    result = db.session.execute(
+        db.text("SELECT key, value FROM app_settings WHERE key = :key"),
+        {"key": key},
+    )
+    row = result.mappings().first()
+    if not row:
+        return jsonify({"error": "Setting not found"}), 404
+    return jsonify(dict(row))
+
+
+@settings_bp.route("/app-settings/<key>", methods=["PUT"])
+def update_app_setting(key):
+    data = request.get_json()
+    value = data.get("value")
+    if value is None:
+        return jsonify({"error": "value is required"}), 400
+    db.session.execute(
+        db.text(
+            "INSERT INTO app_settings (key, value, updated_at) "
+            "VALUES (:key, :value, NOW()) "
+            "ON CONFLICT (key) DO UPDATE SET value = :value, updated_at = NOW()"
+        ),
+        {"key": key, "value": value},
+    )
+    db.session.commit()
+    return jsonify({"message": "Setting updated"})

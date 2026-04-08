@@ -233,6 +233,29 @@
         <h1>Settings</h1>
     </div>
 
+    <!-- ==================== GENERAL SETTINGS ==================== -->
+    <div class="settings-section">
+        <div class="settings-section-header">
+            <h2>
+                <span class="material-icons-round" style="color:var(--md-on-surface-variant);font-size:20px;">tune</span>
+                General
+            </h2>
+        </div>
+        <div class="settings-section-body">
+            <div class="form-group" style="max-width: 320px;">
+                <label>Display Timezone</label>
+                <select class="form-select" id="setting-timezone">
+                    <option value="America/New_York">Eastern (America/New_York)</option>
+                    <option value="America/Chicago">Central (America/Chicago)</option>
+                    <option value="America/Denver">Mountain (America/Denver)</option>
+                    <option value="America/Los_Angeles">Pacific (America/Los_Angeles)</option>
+                    <option value="UTC">UTC</option>
+                </select>
+                <span class="text-sm text-muted" style="margin-top:4px;display:block;">Times on the History page will be shown in this timezone.</span>
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== STORE CONNECTIONS ==================== -->
     <div class="settings-section">
         <div class="settings-section-header">
@@ -439,13 +462,36 @@ let fieldSort = { key: null, dir: "asc" };
 
 // ── Init ──
 document.addEventListener("DOMContentLoaded", async () => {
-    await Promise.all([loadStores(), loadShopifyStores()]);
+    await Promise.all([loadStores(), loadShopifyStores(), loadAppSettings()]);
     await Promise.all([loadFormulas(), loadFieldConfigs()]);
     bindStoreEvents();
     bindShopifyStoreEvents();
     bindFormulaEvents();
     bindFieldEvents();
+    bindAppSettingsEvents();
 });
+
+// ── APP SETTINGS ──
+async function loadAppSettings() {
+    try {
+        const settings = await api.get("/api/settings/app-settings");
+        const tz = settings.timezone || "America/Chicago";
+        document.getElementById("setting-timezone").value = tz;
+    } catch {
+        // default is fine
+    }
+}
+
+function bindAppSettingsEvents() {
+    document.getElementById("setting-timezone").addEventListener("change", async (e) => {
+        try {
+            await api.put("/api/settings/app-settings/timezone", { value: e.target.value });
+            showToast("Timezone updated", "success");
+        } catch (err) {
+            showToast(`Error: ${err.message}`, "error");
+        }
+    });
+}
 
 // ── STORES ──
 async function loadStores() {

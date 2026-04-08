@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}History - Item Entry{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/history.css">
+{% endblock %}
+
+{% block content %}
+<div class="history-page">
+    <div class="page-header">
+        <h1>History</h1>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="stats-bar" id="stats-bar">
+        <div class="stat-badge stat-total" data-filter="">
+            <span class="material-icons-round">analytics</span>
+            <span>Total</span>
+            <span class="stat-count" id="stat-total">0</span>
+        </div>
+        <div class="stat-badge stat-success" data-filter="success">
+            <span class="material-icons-round">check_circle</span>
+            <span>Success</span>
+            <span class="stat-count" id="stat-success">0</span>
+        </div>
+        <div class="stat-badge stat-partial" data-filter="partial">
+            <span class="material-icons-round">warning</span>
+            <span>Partial</span>
+            <span class="stat-count" id="stat-partial">0</span>
+        </div>
+        <div class="stat-badge stat-failed" data-filter="failed">
+            <span class="material-icons-round">cancel</span>
+            <span>Failed</span>
+            <span class="stat-count" id="stat-failed">0</span>
+        </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="history-toolbar">
+        <div class="search-box">
+            <span class="material-icons-round">search</span>
+            <input type="text" id="history-search" placeholder="Search by name, UPC, or SKU...">
+        </div>
+        <div class="filter-group">
+            <select class="form-select" id="filter-type">
+                <option value="">All Types</option>
+                <option value="mssql">MSSQL</option>
+                <option value="shopify">Shopify</option>
+            </select>
+            <select class="form-select" id="filter-status">
+                <option value="">All Statuses</option>
+                <option value="success">Success</option>
+                <option value="partial">Partial</option>
+                <option value="failed">Failed</option>
+            </select>
+            <select class="form-select" id="filter-store">
+                <option value="">All Stores</option>
+            </select>
+            <input type="date" class="form-input" id="filter-date-from" title="From date">
+            <input type="date" class="form-input" id="filter-date-to" title="To date">
+        </div>
+        <div class="toolbar-actions">
+            <button class="btn btn-secondary" id="btn-export" title="Export CSV">
+                <span class="material-icons-round" style="font-size:16px;">download</span>
+                Export
+            </button>
+            <button class="btn btn-danger" id="btn-delete-selected" disabled title="Delete selected entries">
+                <span class="material-icons-round" style="font-size:16px;">delete</span>
+                Delete
+            </button>
+            <button class="btn btn-danger" id="btn-delete-failed" title="Delete all failed entries">
+                <span class="material-icons-round" style="font-size:16px;">delete_sweep</span>
+                Clear Failed
+            </button>
+        </div>
+    </div>
+
+    <!-- List -->
+    <div class="history-list" id="history-list">
+        <div class="history-header">
+            <div class="row-checkbox">
+                <input type="checkbox" id="select-all" title="Select all">
+            </div>
+            <div>Type</div>
+            <div>Product</div>
+            <div>Identifiers</div>
+            <div>Date</div>
+            <div>Status</div>
+            <div>Stores</div>
+        </div>
+        <div id="history-rows"></div>
+    </div>
+
+    <!-- Pagination -->
+    <div class="history-pagination" id="history-pagination"></div>
+</div>
+
+<!-- Slide-out drawer -->
+<div class="drawer-overlay" id="drawer-overlay"></div>
+<div class="detail-drawer" id="detail-drawer">
+    <div class="drawer-header">
+        <h3 id="drawer-title">Entry Details</h3>
+        <button class="btn btn-icon" id="btn-close-drawer" title="Close">
+            <span class="material-icons-round">close</span>
+        </button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+</div>
+
+<!-- Confirmation modal container -->
+<div id="confirm-container"></div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="/static/js/history.js"></script>
+{% endblock %}

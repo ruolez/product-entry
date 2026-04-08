@@ -29,5 +29,5 @@ export const api = {
     get: (url) => apiRequest("GET", url),
     post: (url, body) => apiRequest("POST", url, body),
     put: (url, body) => apiRequest("PUT", url, body),
-    delete: (url) => apiRequest("DELETE", url),
+    delete: (url, body) => apiRequest("DELETE", url, body),
 };

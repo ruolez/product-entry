@@ -13,11 +13,13 @@ def create_app():
     from routes.api import api_bp
     from routes.settings_api import settings_bp
     from routes.shopify_api import shopify_bp
+    from routes.history_api import history_bp
 
     app.register_blueprint(pages_bp)
     app.register_blueprint(api_bp, url_prefix="/api")
     app.register_blueprint(settings_bp, url_prefix="/api/settings")
     app.register_blueprint(shopify_bp, url_prefix="/api/shopify")
+    app.register_blueprint(history_bp, url_prefix="/api/history")
 
     @app.after_request
     def add_no_cache_headers(response):
