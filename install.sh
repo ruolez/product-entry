@@ -938,11 +938,16 @@ main() {
         local stores=$(echo "$info" | cut -d'|' -f3)
         local formulas=$(echo "$info" | cut -d'|' -f4)
 
+        local commit_info=""
+        if [ -d "${INSTALL_DIR}/.git" ]; then
+            commit_info=$(cd "$INSTALL_DIR" && git log --oneline -1 --format="%h %ci" 2>/dev/null | cut -c1-30)
+        fi
+
         case "$status" in
             RUNNING)      status_line="Status: RUNNING  |  http://${ip}"
-                          ip_line="Stores: ${stores}  |  Formulas: ${formulas}" ;;
+                          ip_line="Stores: ${stores}  |  Formulas: ${formulas}  |  ${commit_info}" ;;
             STOPPED)      status_line="Status: STOPPED  |  ${INSTALL_DIR}"
-                          ip_line="Services are not running" ;;
+                          ip_line="Last update: ${commit_info:-unknown}" ;;
             *)            status_line="Status: NOT INSTALLED"
                           ip_line="Choose Install to get started" ;;
         esac
