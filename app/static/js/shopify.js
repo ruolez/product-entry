@@ -106,29 +106,16 @@ async function onStoreSelectionChange() {
         count === 0 ? "No stores selected" : `${count} store${count > 1 ? "s" : ""} selected`;
     document.getElementById("sp-btn-save").disabled = count === 0;
 
-    const statusEl = document.getElementById("sp-data-status");
-
     for (const sid of state.selectedStoreIds) {
         if (state._loaded?.[sid]) continue;
         const store = state.stores.find(s => s.id === sid);
         const name = store?.name || sid;
 
-        // Show loading state
-        statusEl.className = "";
-        statusEl.style.background = "var(--md-primary-light)";
-        statusEl.style.color = "var(--md-primary)";
-        statusEl.innerHTML = `<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> Loading data from ${escapeHtml(name)}...`;
-
         try {
-            console.log(`[Shopify] Fetching store-data for ${name} (id=${sid})...`);
             const resp = await fetch(`/api/shopify/stores/${sid}/store-data`);
-            console.log(`[Shopify] store-data response status: ${resp.status}`);
             const storeData = await resp.json();
-            console.log(`[Shopify] store-data response:`, JSON.stringify(storeData).substring(0, 500));
 
-            if (storeData.error) {
-                throw new Error(storeData.error);
-            }
+            if (storeData.error) throw new Error(storeData.error);
 
             state.collections[sid] = storeData.collections || [];
             state.locations[sid] = storeData.locations || [];
@@ -148,36 +135,14 @@ async function onStoreSelectionChange() {
                 if (!state.existingTags.includes(t)) state.existingTags.push(t);
             }
 
-            console.log(`[Shopify] Loaded for ${name}: ${state.vendors.length} vendors, ${state.productTypes.length} types, ${state.existingTags.length} tags, ${state.collections[sid].length} collections, ${state.publications[sid].length} publications`);
-
             if (storeData.errors && Object.keys(storeData.errors).length) {
-                for (const [field, msg] of Object.entries(storeData.errors)) {
-                    console.warn(`[Shopify] ${field} failed for ${name}:`, msg);
-                }
                 const failedFields = Object.keys(storeData.errors).join(", ");
-                statusEl.style.background = "var(--md-warning-light)";
-                statusEl.style.color = "#e37400";
-                statusEl.innerHTML = `<span class="material-icons-round" style="font-size:16px;">warning</span> ${escapeHtml(name)}: Partial load — failed: ${escapeHtml(failedFields)}`;
                 showToast(`${name}: Failed to load ${failedFields}. Check API token scopes.`, "warning", 8000);
-            } else {
-                const parts = [];
-                if (state.vendors.length) parts.push(`${state.vendors.length} vendors`);
-                if (state.productTypes.length) parts.push(`${state.productTypes.length} types`);
-                if (state.existingTags.length) parts.push(`${state.existingTags.length} tags`);
-                if (state.collections[sid].length) parts.push(`${state.collections[sid].length} collections`);
-                if (state.publications[sid].length) parts.push(`${state.publications[sid].length} channels`);
-                statusEl.style.background = "var(--md-success-light)";
-                statusEl.style.color = "var(--md-success)";
-                statusEl.innerHTML = `<span class="material-icons-round" style="font-size:16px;">check_circle</span> ${escapeHtml(name)}: ${parts.join(", ") || "Connected (no data yet)"}`;
             }
 
             if (!state._loaded) state._loaded = {};
             state._loaded[sid] = true;
         } catch (err) {
-            console.error(`[Shopify] Store data load FAILED for ${name}:`, err);
-            statusEl.style.background = "var(--md-error-light)";
-            statusEl.style.color = "var(--md-error)";
-            statusEl.innerHTML = `<span class="material-icons-round" style="font-size:16px;">error</span> ${escapeHtml(name)}: ${escapeHtml(err.message)}`;
             showToast(`Failed to load ${name}: ${err.message}`, "error");
         }
     }
