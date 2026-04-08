@@ -1,4 +1,7 @@
+import os
 import uuid
+import tempfile
+import json
 
 from flask import Blueprint, jsonify, request
 
@@ -22,7 +25,8 @@ from services.shopify_image_service import (
 
 shopify_bp = Blueprint("shopify", __name__)
 
-_temp_images = {}
+_UPLOAD_DIR = os.path.join(tempfile.gettempdir(), "shopify_uploads")
+os.makedirs(_UPLOAD_DIR, exist_ok=True)
 
 
 @shopify_bp.route("/stores")
@@ -152,12 +156,14 @@ def upload_images():
         if not f.filename:
             continue
         file_id = str(uuid.uuid4())
-        file_bytes = f.read()
-        _temp_images[file_id] = {
-            "bytes": file_bytes,
+        file_path = os.path.join(_UPLOAD_DIR, file_id)
+        f.save(file_path)
+        meta = {
             "filename": f.filename,
             "content_type": f.content_type or "image/jpeg",
         }
+        with open(file_path + ".meta", "w") as mf:
+            json.dump(meta, mf)
         uploaded.append({"id": file_id, "filename": f.filename})
     return jsonify({"images": uploaded})
 
@@ -207,12 +213,29 @@ def create_product():
 def _collect_raw_images(image_ids):
     images = []
     for img_id in image_ids:
-        img = _temp_images.get(img_id)
-        if img:
-            images.append(img)
+        file_path = os.path.join(_UPLOAD_DIR, img_id)
+        meta_path = file_path + ".meta"
+        if not os.path.exists(file_path) or not os.path.exists(meta_path):
+            continue
+        with open(meta_path) as mf:
+            meta = json.load(mf)
+        with open(file_path, "rb") as f:
+            file_bytes = f.read()
+        images.append({
+            "bytes": file_bytes,
+            "filename": meta["filename"],
+            "content_type": meta["content_type"],
+        })
     return images
 
 
 def _cleanup_temp_images(image_ids):
     for img_id in image_ids:
-        _temp_images.pop(img_id, None)
+        for path in [
+            os.path.join(_UPLOAD_DIR, img_id),
+            os.path.join(_UPLOAD_DIR, img_id + ".meta"),
+        ]:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
