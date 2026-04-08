@@ -9,6 +9,8 @@ from services.shopify_service import (
     get_locations,
     get_publications,
     get_product_types,
+    get_vendors,
+    get_tags,
     push_to_stores,
 )
 from services.shopify_image_service import (
@@ -63,6 +65,24 @@ def store_product_types(store_id):
     try:
         types = get_product_types(store_id)
         return jsonify(types)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@shopify_bp.route("/stores/<int:store_id>/vendors")
+def store_vendors(store_id):
+    try:
+        vendors = get_vendors(store_id)
+        return jsonify(vendors)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@shopify_bp.route("/stores/<int:store_id>/tags")
+def store_tags(store_id):
+    try:
+        tags = get_tags(store_id)
+        return jsonify(tags)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

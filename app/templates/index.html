@@ -1355,23 +1355,34 @@
                     <div class="shopify-section-body" id="sp-section-org">
                         <div class="form-group" style="margin-bottom:var(--md-spacing-sm);">
                             <label>Type</label>
-                            <input type="text" class="form-input" id="sp-product-type" placeholder="">
+                            <div class="autocomplete-wrap">
+                                <input type="text" class="form-input" id="sp-product-type" placeholder="Search or enter product type..." autocomplete="off">
+                                <div class="autocomplete-dropdown hidden" id="sp-product-type-dropdown"></div>
+                            </div>
                         </div>
                         <div class="form-group" style="margin-bottom:var(--md-spacing-sm);">
                             <label>Vendor</label>
-                            <input type="text" class="form-input" id="sp-vendor" placeholder="">
+                            <div class="autocomplete-wrap">
+                                <input type="text" class="form-input" id="sp-vendor" placeholder="Search or enter vendor..." autocomplete="off">
+                                <div class="autocomplete-dropdown hidden" id="sp-vendor-dropdown"></div>
+                            </div>
                         </div>
                         <div class="form-group" style="margin-bottom:var(--md-spacing-sm);">
                             <label>Collections</label>
-                            <div class="tag-input-container" id="sp-collections-input">
-                                <input type="text" class="tag-input" id="sp-collections-search" placeholder="Search collections...">
+                            <div class="autocomplete-wrap">
+                                <div class="tag-input-container" id="sp-collections-input">
+                                    <input type="text" class="tag-input" id="sp-collections-search" placeholder="Search collections..." autocomplete="off">
+                                </div>
+                                <div class="autocomplete-dropdown hidden" id="sp-collections-dropdown"></div>
                             </div>
-                            <div class="autocomplete-dropdown hidden" id="sp-collections-dropdown"></div>
                         </div>
                         <div class="form-group">
                             <label>Tags</label>
-                            <div class="tag-input-container" id="sp-tags-container">
-                                <input type="text" class="tag-input" id="sp-tags-input" placeholder="Add tags...">
+                            <div class="autocomplete-wrap">
+                                <div class="tag-input-container" id="sp-tags-container">
+                                    <input type="text" class="tag-input" id="sp-tags-input" placeholder="Search or add tags..." autocomplete="off">
+                                </div>
+                                <div class="autocomplete-dropdown hidden" id="sp-tags-dropdown"></div>
                             </div>
                         </div>
                     </div>

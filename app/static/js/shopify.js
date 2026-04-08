@@ -9,7 +9,9 @@ const state = {
     locations: {},
     publications: {},
     watermarkInfo: {},
+    vendors: [],
     productTypes: [],
+    existingTags: [],
     options: [],
     variants: [],
     uploadedImages: [],
@@ -48,6 +50,8 @@ async function initShopifyOnce() {
     bindMetafieldEvents();
     bindTagInput();
     bindCollectionsSearch();
+    bindAutocomplete("sp-product-type", "sp-product-type-dropdown", () => state.productTypes, null);
+    bindAutocomplete("sp-vendor", "sp-vendor-dropdown", () => state.vendors, null);
     bindSeoSync();
     bindActionButtons();
 }
@@ -105,16 +109,22 @@ async function onStoreSelectionChange() {
     for (const sid of state.selectedStoreIds) {
         if (!state.collections[sid]) {
             try {
-                const [cols, locs, pubs, wmInfo] = await Promise.all([
+                const [cols, locs, pubs, wmInfo, vendors, types, tags] = await Promise.all([
                     api.get(`/api/shopify/stores/${sid}/collections`),
                     api.get(`/api/shopify/stores/${sid}/locations`),
                     api.get(`/api/shopify/stores/${sid}/publications`),
                     api.get(`/api/shopify/stores/${sid}/watermark-info`),
+                    api.get(`/api/shopify/stores/${sid}/vendors`),
+                    api.get(`/api/shopify/stores/${sid}/product-types`),
+                    api.get(`/api/shopify/stores/${sid}/tags`),
                 ]);
                 state.collections[sid] = cols;
                 state.locations[sid] = locs;
                 state.publications[sid] = pubs;
                 state.watermarkInfo[sid] = wmInfo;
+                for (const v of vendors) { if (!state.vendors.includes(v)) state.vendors.push(v); }
+                for (const t of types) { if (!state.productTypes.includes(t)) state.productTypes.push(t); }
+                for (const t of tags) { if (!state.existingTags.includes(t)) state.existingTags.push(t); }
             } catch (err) {
                 showToast(`Failed to load data for store ${sid}: ${err.message}`, "error");
             }
@@ -376,72 +386,190 @@ function renderWatermarkPreviews() {
     }
 }
 
+// ── Generic Autocomplete ───────────────────────────────
+function bindAutocomplete(inputId, dropdownId, getItems, onSelect) {
+    const input = document.getElementById(inputId);
+    const dropdown = document.getElementById(dropdownId);
+    if (!input || !dropdown) return;
+
+    let activeIndex = -1;
+
+    function render(query) {
+        const items = getItems();
+        const q = query.toLowerCase();
+        const filtered = q
+            ? items.filter(item => item.toLowerCase().includes(q)).slice(0, 10)
+            : [];
+
+        if (!filtered.length) {
+            dropdown.classList.add("hidden");
+            activeIndex = -1;
+            return;
+        }
+
+        dropdown.innerHTML = filtered.map((item, i) => `
+            <div class="autocomplete-item ${i === activeIndex ? "active" : ""}" data-index="${i}" data-value="${escapeHtml(item)}">
+                <span class="ac-subcat">${highlightMatch(item, query)}</span>
+            </div>
+        `).join("");
+        dropdown.classList.remove("hidden");
+
+        dropdown.querySelectorAll(".autocomplete-item").forEach(el => {
+            el.addEventListener("mousedown", (e) => {
+                e.preventDefault();
+                input.value = el.dataset.value;
+                dropdown.classList.add("hidden");
+                if (onSelect) onSelect(el.dataset.value);
+            });
+        });
+    }
+
+    input.addEventListener("input", debounce(() => {
+        activeIndex = -1;
+        render(input.value.trim());
+    }, 150));
+
+    input.addEventListener("keydown", (e) => {
+        const items = dropdown.querySelectorAll(".autocomplete-item");
+        if (!items.length) return;
+
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            activeIndex = Math.min(activeIndex + 1, items.length - 1);
+            updateActive(items, activeIndex);
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            activeIndex = Math.max(activeIndex - 1, 0);
+            updateActive(items, activeIndex);
+        } else if (e.key === "Enter" && activeIndex >= 0) {
+            e.preventDefault();
+            input.value = items[activeIndex].dataset.value;
+            dropdown.classList.add("hidden");
+            activeIndex = -1;
+            if (onSelect) onSelect(input.value);
+        } else if (e.key === "Escape") {
+            dropdown.classList.add("hidden");
+            activeIndex = -1;
+        }
+    });
+
+    input.addEventListener("blur", () => {
+        setTimeout(() => { dropdown.classList.add("hidden"); activeIndex = -1; }, 150);
+    });
+
+    input.addEventListener("focus", () => {
+        if (input.value.trim()) render(input.value.trim());
+    });
+}
+
+function highlightMatch(text, query) {
+    if (!query) return escapeHtml(text);
+    const idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1) return escapeHtml(text);
+    const before = text.slice(0, idx);
+    const match = text.slice(idx, idx + query.length);
+    const after = text.slice(idx + query.length);
+    return `${escapeHtml(before)}<mark>${escapeHtml(match)}</mark>${escapeHtml(after)}`;
+}
+
+function updateActive(items, index) {
+    items.forEach((el, i) => el.classList.toggle("active", i === index));
+    if (items[index]) items[index].scrollIntoView({ block: "nearest" });
+}
+
 // ── Collections Search/Select ──────────────────────────
 function bindCollectionsSearch() {
     const input = document.getElementById("sp-collections-search");
     const dropdown = document.getElementById("sp-collections-dropdown");
+    if (!input || !dropdown) return;
 
-    input.addEventListener("input", debounce(() => {
-        const query = input.value.trim().toLowerCase();
-        if (!query || query.length < 1) {
-            dropdown.classList.add("hidden");
-            return;
-        }
+    let activeIndex = -1;
 
-        const allCollections = [];
+    function getAllCollections() {
+        const all = [];
         for (const sid of state.selectedStoreIds) {
-            const cols = state.collections[sid] || [];
-            for (const col of cols) {
-                if (!allCollections.find(c => c.id === col.id)) {
-                    allCollections.push(col);
-                }
+            for (const col of (state.collections[sid] || [])) {
+                if (!all.find(c => c.id === col.id)) all.push(col);
             }
         }
+        return all;
+    }
 
-        const filtered = allCollections
-            .filter(c => c.title.toLowerCase().includes(query))
+    function render(query) {
+        const q = query.toLowerCase();
+        const filtered = getAllCollections()
+            .filter(c => c.title.toLowerCase().includes(q))
             .filter(c => !state.selectedCollections.find(sc => sc.id === c.id))
             .slice(0, 10);
 
         if (!filtered.length) {
             dropdown.classList.add("hidden");
+            activeIndex = -1;
             return;
         }
 
-        dropdown.innerHTML = filtered.map(c => `
-            <div class="autocomplete-item" data-id="${c.id}" data-title="${escapeHtml(c.title)}">
-                <span class="ac-subcat">${escapeHtml(c.title)}</span>
+        dropdown.innerHTML = filtered.map((c, i) => `
+            <div class="autocomplete-item ${i === activeIndex ? "active" : ""}" data-index="${i}" data-id="${c.id}" data-title="${escapeHtml(c.title)}">
+                <span class="ac-subcat">${highlightMatch(c.title, query)}</span>
             </div>
         `).join("");
         dropdown.classList.remove("hidden");
 
         dropdown.querySelectorAll(".autocomplete-item").forEach(item => {
-            item.addEventListener("click", () => {
-                state.selectedCollections.push({
-                    id: item.dataset.id,
-                    title: item.dataset.title,
-                });
+            item.addEventListener("mousedown", (e) => {
+                e.preventDefault();
+                state.selectedCollections.push({ id: item.dataset.id, title: item.dataset.title });
                 input.value = "";
                 dropdown.classList.add("hidden");
+                activeIndex = -1;
                 renderCollectionChips();
             });
         });
-    }, 200));
+    }
+
+    input.addEventListener("input", debounce(() => {
+        activeIndex = -1;
+        const q = input.value.trim();
+        if (!q) { dropdown.classList.add("hidden"); return; }
+        render(q);
+    }, 150));
 
     input.addEventListener("keydown", (e) => {
-        if (e.key === "Backspace" && !input.value && state.selectedCollections.length) {
+        const items = dropdown.querySelectorAll(".autocomplete-item");
+
+        if (e.key === "ArrowDown" && items.length) {
+            e.preventDefault();
+            activeIndex = Math.min(activeIndex + 1, items.length - 1);
+            updateActive(items, activeIndex);
+        } else if (e.key === "ArrowUp" && items.length) {
+            e.preventDefault();
+            activeIndex = Math.max(activeIndex - 1, 0);
+            updateActive(items, activeIndex);
+        } else if (e.key === "Enter" && activeIndex >= 0 && items[activeIndex]) {
+            e.preventDefault();
+            state.selectedCollections.push({
+                id: items[activeIndex].dataset.id,
+                title: items[activeIndex].dataset.title,
+            });
+            input.value = "";
+            dropdown.classList.add("hidden");
+            activeIndex = -1;
+            renderCollectionChips();
+        } else if (e.key === "Backspace" && !input.value && state.selectedCollections.length) {
             state.selectedCollections.pop();
             renderCollectionChips();
-        }
-        if (e.key === "Escape") {
+        } else if (e.key === "Escape") {
             dropdown.classList.add("hidden");
+            activeIndex = -1;
         }
     });
 
-    document.addEventListener("click", (e) => {
-        if (!e.target.closest("#sp-collections-input") && !e.target.closest("#sp-collections-dropdown")) {
-            dropdown.classList.add("hidden");
-        }
+    input.addEventListener("blur", () => {
+        setTimeout(() => { dropdown.classList.add("hidden"); activeIndex = -1; }, 150);
+    });
+
+    input.addEventListener("focus", () => {
+        if (input.value.trim()) render(input.value.trim());
     });
 }
 
@@ -792,20 +920,102 @@ function renderMetafields() {
 // ── Tags ───────────────────────────────────────────────
 function bindTagInput() {
     const input = document.getElementById("sp-tags-input");
+    const dropdown = document.getElementById("sp-tags-dropdown");
     if (!input) return;
+
+    let activeIndex = -1;
+
+    function addTag(tag) {
+        if (tag && !state.tags.includes(tag)) {
+            state.tags.push(tag);
+            renderTags();
+        }
+    }
+
+    function renderSuggestions(query) {
+        if (!dropdown) return;
+        const q = query.toLowerCase();
+        const suggestions = state.existingTags
+            .filter(t => t.toLowerCase().includes(q))
+            .filter(t => !state.tags.includes(t))
+            .slice(0, 8);
+
+        if (!suggestions.length) {
+            dropdown.classList.add("hidden");
+            activeIndex = -1;
+            return;
+        }
+
+        dropdown.innerHTML = suggestions.map((t, i) => `
+            <div class="autocomplete-item ${i === activeIndex ? "active" : ""}" data-index="${i}" data-value="${escapeHtml(t)}">
+                <span class="ac-subcat">${highlightMatch(t, query)}</span>
+            </div>
+        `).join("");
+        dropdown.classList.remove("hidden");
+
+        dropdown.querySelectorAll(".autocomplete-item").forEach(el => {
+            el.addEventListener("mousedown", (e) => {
+                e.preventDefault();
+                addTag(el.dataset.value);
+                input.value = "";
+                dropdown.classList.add("hidden");
+                activeIndex = -1;
+            });
+        });
+    }
+
+    input.addEventListener("input", debounce(() => {
+        activeIndex = -1;
+        const q = input.value.trim();
+        if (!q) { if (dropdown) dropdown.classList.add("hidden"); return; }
+        renderSuggestions(q);
+    }, 150));
+
     input.addEventListener("keydown", (e) => {
+        if (dropdown) {
+            const items = dropdown.querySelectorAll(".autocomplete-item");
+            if (e.key === "ArrowDown" && items.length) {
+                e.preventDefault();
+                activeIndex = Math.min(activeIndex + 1, items.length - 1);
+                updateActive(items, activeIndex);
+                return;
+            } else if (e.key === "ArrowUp" && items.length) {
+                e.preventDefault();
+                activeIndex = Math.max(activeIndex - 1, 0);
+                updateActive(items, activeIndex);
+                return;
+            } else if (e.key === "Enter" && activeIndex >= 0 && items[activeIndex]) {
+                e.preventDefault();
+                addTag(items[activeIndex].dataset.value);
+                input.value = "";
+                dropdown.classList.add("hidden");
+                activeIndex = -1;
+                return;
+            }
+        }
+
         if ((e.key === "Enter" || e.key === ",") && input.value.trim()) {
             e.preventDefault();
             const tag = input.value.trim().replace(/,$/,"");
-            if (tag && !state.tags.includes(tag)) {
-                state.tags.push(tag);
-                renderTags();
-            }
+            addTag(tag);
             input.value = "";
+            if (dropdown) dropdown.classList.add("hidden");
+            activeIndex = -1;
         } else if (e.key === "Backspace" && !input.value && state.tags.length) {
             state.tags.pop();
             renderTags();
+        } else if (e.key === "Escape" && dropdown) {
+            dropdown.classList.add("hidden");
+            activeIndex = -1;
         }
+    });
+
+    input.addEventListener("blur", () => {
+        setTimeout(() => { if (dropdown) { dropdown.classList.add("hidden"); activeIndex = -1; } }, 150);
+    });
+
+    input.addEventListener("focus", () => {
+        if (input.value.trim()) renderSuggestions(input.value.trim());
     });
 }
 

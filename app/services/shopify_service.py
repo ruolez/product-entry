@@ -149,6 +149,40 @@ def get_product_types(store_id):
     return [edge["node"] for edge in edges]
 
 
+def get_vendors(store_id):
+    query = """
+    {
+        shop {
+            productVendors(first: 250) {
+                edges {
+                    node
+                }
+            }
+        }
+    }
+    """
+    data = execute_graphql(store_id, query)
+    edges = data.get("shop", {}).get("productVendors", {}).get("edges", [])
+    return [edge["node"] for edge in edges]
+
+
+def get_tags(store_id):
+    query = """
+    {
+        shop {
+            productTags(first: 250) {
+                edges {
+                    node
+                }
+            }
+        }
+    }
+    """
+    data = execute_graphql(store_id, query)
+    edges = data.get("shop", {}).get("productTags", {}).get("edges", [])
+    return [edge["node"] for edge in edges]
+
+
 def staged_uploads_create(store_id, files_info):
     query = """
     mutation stagedUploadsCreate($input: [StagedUploadInput!]!) {
