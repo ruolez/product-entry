@@ -155,7 +155,26 @@ def get_history_entry(entry_type, entry_id):
             result["status"] = "failed"
     else:
         result["status"] = "success"
+
+    # Enrich form_data with store ID → name mapping for display
+    if entry_type == "mssql" and result.get("form_data"):
+        form_data = result["form_data"]
+        store_ids = form_data.get("store_ids", [])
+        if store_ids:
+            store_names = _get_store_names(store_ids)
+            form_data["_store_names"] = store_names
+
     return result
+
+
+def _get_store_names(store_ids):
+    if not store_ids:
+        return {}
+    rows = db.session.execute(
+        db.text("SELECT id, name FROM stores WHERE id = ANY(:ids)"),
+        {"ids": store_ids},
+    ).mappings().all()
+    return {str(r["id"]): r["name"] for r in rows}
 
 
 def get_history_stats(search=None, entry_type=None, date_from=None,

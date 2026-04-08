@@ -495,11 +495,27 @@ function renderDrawer(entry) {
 function renderMssqlFormData(formData) {
     const common = formData.common_fields || formData;
     const perStore = formData.per_store_fields || {};
+    const storeIds = formData.store_ids || [];
     let html = "";
 
+    // Build store ID → name map from stores_targeted + store_ids order
+    const storeIdToName = {};
+    if (formData._store_names) {
+        Object.assign(storeIdToName, formData._store_names);
+    }
+
+    // Collect all per-store field names (to show them in the per-store section, not in common)
+    const perStoreFieldNames = new Set();
+    for (const fields of Object.values(perStore)) {
+        for (const [k, v] of Object.entries(fields)) {
+            if (v !== undefined && v !== null && v !== "") perStoreFieldNames.add(k);
+        }
+    }
+
+    // Render common fields by section
     for (const [sectionKey, fields] of Object.entries(FIELD_SECTIONS)) {
         const label = SECTION_LABELS[sectionKey];
-        const collapsed = sectionKey === "inventory" || sectionKey === "extended";
+        const collapsed = sectionKey === "extended";
         const pairs = [];
 
         fields.forEach(field => {
@@ -527,21 +543,47 @@ function renderMssqlFormData(formData) {
         html += `</dl></div></div>`;
     }
 
-    // Per-store overrides
-    if (Object.keys(perStore).length) {
+    // Any common fields not captured in sections (catch-all)
+    const allSectionFields = new Set(Object.values(FIELD_SECTIONS).flat());
+    const extraPairs = [];
+    for (const [k, v] of Object.entries(common)) {
+        if (!allSectionFields.has(k) && v !== undefined && v !== null && v !== "" && k !== "mode") {
+            const cfg = state.fieldConfigs[k];
+            const displayName = cfg ? cfg.display_name : k;
+            const displayVal = MONEY_FIELDS.has(k) ? formatCurrency(v) : String(v);
+            extraPairs.push([displayName, displayVal]);
+        }
+    }
+    if (extraPairs.length) {
         html += `<div class="drawer-section">
-            <div class="drawer-section-title collapsible collapsed" data-section="per-store">
-                Per-Store Overrides
+            <div class="drawer-section-title collapsible" data-section="other">
+                Other Fields
                 <span class="material-icons-round">expand_more</span>
             </div>
-            <div class="drawer-section-content collapsed">`;
+            <div class="drawer-section-content">
+                <dl class="detail-kv">`;
+        extraPairs.forEach(([k, v]) => {
+            html += `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`;
+        });
+        html += `</dl></div></div>`;
+    }
+
+    // Per-store fields — show each store's fields with store name
+    if (Object.keys(perStore).length) {
+        html += `<div class="drawer-section">
+            <div class="drawer-section-title collapsible" data-section="per-store">
+                Per-Store Fields
+                <span class="material-icons-round">expand_more</span>
+            </div>
+            <div class="drawer-section-content">`;
 
         for (const [storeId, fields] of Object.entries(perStore)) {
             const nonEmpty = Object.entries(fields).filter(([, v]) => v !== undefined && v !== null && v !== "");
             if (!nonEmpty.length) continue;
-            html += `<div style="margin-bottom:var(--md-spacing-sm);">
-                <strong style="font-size:0.8125rem;">Store ${escapeHtml(storeId)}</strong>
-                <dl class="detail-kv">`;
+            const storeName = storeIdToName[storeId] || `Store ${storeId}`;
+            html += `<div style="margin-bottom:var(--md-spacing-md);padding-bottom:var(--md-spacing-sm);border-bottom:1px solid var(--md-outline-variant);">
+                <strong style="font-size:0.8125rem;color:var(--md-primary);">${escapeHtml(storeName)}</strong>
+                <dl class="detail-kv" style="margin-top:4px;">`;
             nonEmpty.forEach(([k, v]) => {
                 const cfg = state.fieldConfigs[k];
                 const displayName = cfg ? cfg.display_name : k;
