@@ -242,7 +242,7 @@ function bindMediaUpload() {
 function handleFiles(files, target) {
     for (const file of files) {
         if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) continue;
-        const id = crypto.randomUUID();
+        const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
         const reader = new FileReader();
         reader.onload = (e) => {
             const entry = { id, file, preview: e.target.result, name: file.name };
