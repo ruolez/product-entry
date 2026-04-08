@@ -1155,6 +1155,7 @@ function updateSeoPreview() {
 function bindActionButtons() {
     document.getElementById("sp-btn-save").addEventListener("click", saveProduct);
     document.getElementById("sp-btn-clear").addEventListener("click", clearForm);
+    document.getElementById("sp-btn-test-data").addEventListener("click", fillTestData);
 }
 
 function validateForm() {
@@ -1418,4 +1419,87 @@ function clearForm() {
     document.getElementById("sp-error-title").textContent = "";
     document.getElementById("sp-watermark-previews").innerHTML = "";
     showToast("Form cleared", "info");
+}
+
+function fillTestData() {
+    const id = Math.floor(Math.random() * 9000) + 1000;
+    const sku = `TEST-${id}`;
+
+    // Basic fields
+    document.getElementById("sp-title").value = `Test Product #${id}`;
+    document.getElementById("sp-vendor").value = "Test Vendor Co";
+    document.getElementById("sp-product-type").value = "Test Category";
+    document.getElementById("sp-status").value = "DRAFT";
+
+    // Pricing
+    document.getElementById("sp-price").value = "29.99";
+    document.getElementById("sp-compare-at-price").value = "39.99";
+    document.getElementById("sp-cost").value = "12.50";
+
+    // Inventory
+    document.getElementById("sp-sku").value = sku;
+    document.getElementById("sp-barcode").value = `0${id}${id}${id}`.slice(0, 12);
+    document.getElementById("sp-track-inventory").checked = true;
+    document.getElementById("sp-continue-selling").checked = false;
+    document.getElementById("sp-charge-tax").checked = true;
+
+    // Shipping
+    document.getElementById("sp-physical-product").checked = true;
+    document.getElementById("sp-weight").value = "0.75";
+    document.getElementById("sp-weight-unit").value = "lb";
+    document.getElementById("sp-country-origin").value = "United States";
+    document.getElementById("sp-hs-code").value = "6109.10";
+
+    // Description (Quill)
+    const descHtml = `<h2>Test Product #${id}</h2><p>This is an <strong>automatically generated</strong> test product for system testing.</p><ul><li>Feature one: Premium quality</li><li>Feature two: Fast shipping</li><li>Feature three: 30-day returns</li></ul><p>Available in multiple sizes and colors.</p>`;
+    if (state.quill) {
+        state.quill.root.innerHTML = descHtml;
+        state.descriptionHtml = descHtml;
+    }
+
+    // SEO
+    document.getElementById("sp-seo-title").value = `Test Product #${id} | Shop`;
+    document.getElementById("sp-seo-title")._userEdited = true;
+    document.getElementById("sp-seo-description").value = `Shop our Test Product #${id}. Premium quality, available in multiple sizes and colors. Free shipping on orders over $50.`;
+    document.getElementById("sp-seo-handle").value = `test-product-${id}`;
+    document.getElementById("sp-seo-handle")._userEdited = true;
+    updateSeoPreview();
+
+    // Tags
+    state.tags = ["test", "sample", "new-arrival", `batch-${id}`];
+    renderTags();
+
+    // Metafields
+    state.metafields = [
+        { namespace: "custom", key: "material", type: "single_line_text_field", value: "Cotton Blend" },
+        { namespace: "custom", key: "care_instructions", type: "multi_line_text_field", value: "Machine wash cold\nTumble dry low" },
+        { namespace: "custom", key: "weight_oz", type: "number_decimal", value: "12.0" },
+    ];
+    renderMetafields();
+
+    // Expand collapsed sections so user can see everything
+    ["sp-section-inventory", "sp-section-shipping", "sp-section-metafields", "sp-section-seo"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove("collapsed");
+    });
+
+    // Variants: Size + Color options
+    state.options = [
+        { name: "Size", values: ["Small", "Medium", "Large"], done: true },
+        { name: "Color", values: ["Red", "Blue"], done: true },
+    ];
+    renderVariantOptions();
+    generateVariants();
+
+    // Override variant SKUs/barcodes with unique values
+    state.variants.forEach((v, i) => {
+        v.sku = `${sku}-${i + 1}`;
+        v.barcode = `0${id}${id}${String(i + 1).padStart(3, "0")}`.slice(0, 12);
+        v.price = (29.99 + i * 2).toFixed(2);
+        v.cost = (12.50 + i).toFixed(2);
+    });
+    renderVariantTable();
+
+    document.getElementById("sp-error-title").textContent = "";
+    showToast(`Test data filled — Product #${id}`, "success");
 }
