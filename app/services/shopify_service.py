@@ -462,7 +462,7 @@ def _build_product_set_input(product_data, image_resource_urls=None):
         inp["variants"] = product["variants"]
 
     if product.get("collectionsToJoin"):
-        inp["collectionsToJoin"] = product["collectionsToJoin"]
+        inp["collections"] = product["collectionsToJoin"]
 
     if image_resource_urls:
         inp["files"] = [
