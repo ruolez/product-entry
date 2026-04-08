@@ -577,49 +577,49 @@ Proceed?" \
     fi
 
     {
-        gauge_msg 0  "[ 1/16] Backup Config" "Backing up .env to .env.backup..."
+        gauge_msg 0  "[ 1/17] Backup Config" "Backing up .env to .env.backup..."
         cp .env .env.backup 2>/dev/null || true
 
-        gauge_msg 5  "[ 2/16] Stop Nginx" "Stopping reverse proxy..."
+        gauge_msg 5  "[ 2/17] Stop Nginx" "Stopping reverse proxy..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" stop nginx >> "$LOG" 2>&1 || true
 
-        gauge_msg 8  "[ 3/16] Stop App" "Stopping Flask application..."
+        gauge_msg 8  "[ 3/17] Stop App" "Stopping Flask application..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" stop app >> "$LOG" 2>&1 || true
 
-        gauge_msg 11 "[ 4/16] Stop Postgres" "Stopping database (data safe in volume)..."
+        gauge_msg 11 "[ 4/17] Stop Postgres" "Stopping database (data safe in volume)..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" down >> "$LOG" 2>&1 || \
         $DC -p "$COMPOSE_PROJECT" down >> "$LOG" 2>&1 || true
 
-        gauge_msg 15 "[ 4/16] Services Stopped" "All containers down. Data volume preserved."
+        gauge_msg 15 "[ 4/17] Services Stopped" "All containers down. Data volume preserved."
         sleep 1
 
-        gauge_msg 17 "[ 5/16] Fetch Code" "git fetch origin main..."
+        gauge_msg 17 "[ 5/17] Fetch Code" "git fetch origin main..."
         git fetch origin main >> "$LOG" 2>&1
 
-        gauge_msg 20 "[ 6/16] Apply Code" "git reset --hard origin/main..."
+        gauge_msg 20 "[ 6/17] Apply Code" "git reset --hard origin/main..."
         git reset --hard origin/main >> "$LOG" 2>&1
         local commit_msg
         commit_msg=$(git log --oneline -1 2>/dev/null | head -c 50)
 
-        gauge_msg 25 "[ 6/16] Code Updated" "${commit_msg}"
+        gauge_msg 25 "[ 6/17] Code Updated" "${commit_msg}"
         sleep 1
 
-        gauge_msg 27 "[ 7/16] Regenerate .env" "Preserving password + Fernet key, IP: ${server_ip}"
+        gauge_msg 27 "[ 7/17] Regenerate .env" "Preserving password + Fernet key, IP: ${server_ip}"
         generate_env_file "$server_ip" "$pg_pass" "$fernet_key"
 
-        gauge_msg 29 "[ 8/16] Regenerate Compose" "docker-compose.prod.yml (3 services, log rotation)"
+        gauge_msg 29 "[ 8/17] Regenerate Compose" "docker-compose.prod.yml (3 services, log rotation)"
         generate_prod_compose
 
-        gauge_msg 31 "[ 9/16] Regenerate Dockerfile" "Dockerfile.prod (python:3.12, 4 Gunicorn workers)"
+        gauge_msg 31 "[ 9/17] Regenerate Dockerfile" "Dockerfile.prod (python:3.12, 4 Gunicorn workers)"
         generate_prod_dockerfile
 
-        gauge_msg 33 "[10/16] Regenerate Nginx" "nginx.conf (server: ${server_ip}, CORS, security)"
+        gauge_msg 33 "[10/17] Regenerate Nginx" "nginx.conf (server: ${server_ip}, CORS, security)"
         generate_prod_nginx "$server_ip"
 
-        gauge_msg 35 "[10/16] Configs Ready" "All production configs regenerated."
+        gauge_msg 35 "[10/17] Configs Ready" "All production configs regenerated."
         sleep 1
 
-        gauge_msg 36 "[11/16] Rebuild App" "Building app container --no-cache (2-5 min)..."
+        gauge_msg 36 "[11/17] Rebuild App" "Building app container --no-cache (2-5 min)..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --no-cache --progress=plain app >> "$LOG" 2>&1 &
         local build_pid=$!
         local build_pct=36
@@ -628,18 +628,18 @@ Proceed?" \
             [ $build_pct -gt 58 ] && build_pct=58
             local last_line
             last_line=$(tail -1 "$LOG" 2>/dev/null | sed 's/^[#0-9 ]*//' | head -c 50)
-            gauge_msg "$build_pct" "[11/16] Rebuild App" "> ${last_line:-working...}"
+            gauge_msg "$build_pct" "[11/17] Rebuild App" "> ${last_line:-working...}"
             sleep 3
         done
         wait $build_pid || true
 
-        gauge_msg 60 "[12/16] Rebuild Nginx" "Building nginx container..."
+        gauge_msg 60 "[12/17] Rebuild Nginx" "Building nginx container..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --no-cache --progress=plain nginx >> "$LOG" 2>&1
 
-        gauge_msg 63 "[12/16] Build Complete" "All container images rebuilt."
+        gauge_msg 63 "[12/17] Build Complete" "All container images rebuilt."
         sleep 1
 
-        gauge_msg 65 "[13/16] Start Postgres" "Starting PostgreSQL 16..."
+        gauge_msg 65 "[13/17] Start Postgres" "Starting PostgreSQL 16..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d postgres >> "$LOG" 2>&1
         local pg_retries=0
         while [ $pg_retries -lt 10 ]; do
@@ -647,42 +647,66 @@ Proceed?" \
                 break
             fi
             pg_retries=$((pg_retries + 1))
-            gauge_msg "$((66 + pg_retries))" "[13/16] Start Postgres" "Health check attempt ${pg_retries}/10..."
+            gauge_msg "$((66 + pg_retries))" "[13/17] Start Postgres" "Health check attempt ${pg_retries}/10..."
             sleep 2
         done
 
-        gauge_msg 75 "[13/16] Start App" "Starting Flask/Gunicorn (4 workers)..."
+        gauge_msg 73 "[13/17] Run Migrations" "Applying database migrations..."
+        # Create schema_migrations table if it doesn't exist (for pre-migration installs)
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
+            psql -U itementry -d itementry -c \
+            "CREATE TABLE IF NOT EXISTS schema_migrations (id SERIAL PRIMARY KEY, filename VARCHAR(255) NOT NULL UNIQUE, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());" \
+            >> "$LOG" 2>&1 || true
+        # Apply each migration file that hasn't been run yet
+        if [ -d "${INSTALL_DIR}/postgres/migrations" ]; then
+            for mig in $(ls "${INSTALL_DIR}/postgres/migrations/"*.sql 2>/dev/null | sort); do
+                local mig_name
+                mig_name=$(basename "$mig")
+                local already_applied
+                already_applied=$($DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
+                    psql -U itementry -d itementry -t -c "SELECT count(*) FROM schema_migrations WHERE filename = '${mig_name}';" 2>/dev/null | tr -d ' ')
+                if [ "$already_applied" = "0" ]; then
+                    gauge_msg 74 "[13/17] Run Migrations" "Applying ${mig_name}..."
+                    cat "$mig" | $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
+                        psql -U itementry -d itementry >> "$LOG" 2>&1
+                    $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
+                        psql -U itementry -d itementry -c "INSERT INTO schema_migrations (filename) VALUES ('${mig_name}');" >> "$LOG" 2>&1
+                fi
+            done
+        fi
+
+        gauge_msg 75 "[14/17] Start App" "Starting Flask/Gunicorn (4 workers)..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d app >> "$LOG" 2>&1
         sleep 2
 
-        gauge_msg 78 "[13/16] Start Nginx" "Starting reverse proxy on port ${PORT}..."
+        gauge_msg 78 "[14/17] Start Nginx" "Starting reverse proxy on port ${PORT}..."
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d nginx >> "$LOG" 2>&1
         sleep 1
 
-        gauge_msg 80 "[13/16] Services Running" "All 3 containers started."
+        gauge_msg 80 "[14/17] Services Running" "All 3 containers started."
         sleep 1
 
-        gauge_msg 82 "[14/16] Cleanup" "Pruning unused Docker images..."
+        gauge_msg 82 "[15/17] Cleanup" "Pruning unused Docker images..."
         docker image prune -f >> "$LOG" 2>&1
 
-        gauge_msg 85 "[14/16] Cleanup" "Pruning build cache..."
+        gauge_msg 85 "[15/17] Cleanup" "Pruning build cache..."
         docker builder prune -f >> "$LOG" 2>&1
 
-        gauge_msg 87 "[14/16] Cleanup" "Truncating large log files..."
+        gauge_msg 87 "[15/17] Cleanup" "Truncating large log files..."
         find /var/lib/docker/containers/ -name "*.log" -size +10M -exec truncate -s 0 {} \; 2>/dev/null || true
 
-        gauge_msg 89 "[15/16] Health Check" "GET http://localhost/api/health ..."
+        gauge_msg 89 "[16/17] Health Check" "GET http://localhost/api/health ..."
         local retries=0
         while [ $retries -lt 20 ]; do
             if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
                 break
             fi
             retries=$((retries + 1))
-            gauge_msg "$((89 + retries / 2))" "[15/16] Health Check" "Waiting for response (attempt ${retries}/20)..."
+            gauge_msg "$((89 + retries / 2))" "[16/17] Health Check" "Waiting for response (attempt ${retries}/20)..."
             sleep 2
         done
 
-        gauge_msg 98 "[16/16] Verified" "Health check passed. Application is running."
+        gauge_msg 98 "[17/17] Verified" "Health check passed. Application is running."
         sleep 1
 
         gauge_msg 100 "Update complete!" "All services running at http://${server_ip}"

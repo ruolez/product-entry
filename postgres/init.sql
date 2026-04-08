@@ -54,6 +54,13 @@ CREATE TABLE store_field_defaults (
     UNIQUE(store_id, field_name)
 );
 
+-- Migration tracking (which SQL migrations have been applied)
+CREATE TABLE schema_migrations (
+    id              SERIAL PRIMARY KEY,
+    filename        VARCHAR(255) NOT NULL UNIQUE,
+    applied_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Audit log for item insertions
 CREATE TABLE insertion_log (
     id              SERIAL PRIMARY KEY,
