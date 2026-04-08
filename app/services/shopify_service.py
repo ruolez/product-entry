@@ -293,7 +293,7 @@ def publish_product(store_id, product_id, publication_ids):
     return result
 
 
-def push_to_stores(store_ids, product_data, image_resource_urls=None):
+def push_to_stores(store_ids, product_data, per_store_image_urls=None):
     results = {
         "stores_succeeded": [],
         "stores_failed": [],
@@ -301,13 +301,14 @@ def push_to_stores(store_ids, product_data, image_resource_urls=None):
         "product_ids": {},
     }
 
+    per_store_urls = per_store_image_urls or {}
+
     for sid in store_ids:
         store = get_shopify_store(sid)
         store_name = store["name"] if store else f"Store {sid}"
         try:
-            product_input = _build_product_set_input(
-                product_data, image_resource_urls
-            )
+            store_image_urls = per_store_urls.get(sid, [])
+            product_input = _build_product_set_input(product_data, store_image_urls)
             product = create_product(sid, product_input)
 
             if not product:
@@ -318,14 +319,19 @@ def push_to_stores(store_ids, product_data, image_resource_urls=None):
             results["stores_succeeded"].append(store_name)
 
             inventory = product_data.get("inventory", {})
-            location_quantities = inventory.get("location_quantities", {})
-            if location_quantities:
+            per_store_inv = inventory.get("per_store", {})
+            store_inv = per_store_inv.get(str(sid), {})
+            if not store_inv:
+                store_inv = inventory.get("location_quantities", {})
+
+            if store_inv:
                 variants = product.get("variants", {}).get("edges", [])
                 for variant_edge in variants:
                     inv_item_id = variant_edge["node"]["inventoryItem"]["id"]
-                    set_inventory_quantities(sid, inv_item_id, location_quantities)
+                    set_inventory_quantities(sid, inv_item_id, store_inv)
 
-            pub_ids = product_data.get("publication_ids", [])
+            per_store_pubs = product_data.get("per_store_publications", {})
+            pub_ids = per_store_pubs.get(str(sid), product_data.get("publication_ids", []))
             if pub_ids:
                 publish_product(sid, product_id, pub_ids)
 
@@ -341,20 +347,15 @@ def _build_product_set_input(product_data, image_resource_urls=None):
     product = product_data.get("product", {})
     inp = {"title": product.get("title", "")}
 
-    if product.get("descriptionHtml"):
-        inp["descriptionHtml"] = product["descriptionHtml"]
-    if product.get("handle"):
-        inp["handle"] = product["handle"]
-    if product.get("vendor"):
-        inp["vendor"] = product["vendor"]
-    if product.get("productType"):
-        inp["productType"] = product["productType"]
+    for key in [
+        "descriptionHtml", "handle", "vendor", "productType",
+        "status", "templateSuffix", "category",
+    ]:
+        if product.get(key):
+            inp[key] = product[key]
+
     if product.get("tags"):
         inp["tags"] = product["tags"]
-    if product.get("status"):
-        inp["status"] = product["status"]
-    if product.get("templateSuffix"):
-        inp["templateSuffix"] = product["templateSuffix"]
 
     if product.get("seo"):
         inp["seo"] = product["seo"]
@@ -370,9 +371,6 @@ def _build_product_set_input(product_data, image_resource_urls=None):
 
     if product.get("collectionsToJoin"):
         inp["collectionsToJoin"] = product["collectionsToJoin"]
-
-    if product.get("category"):
-        inp["category"] = product["category"]
 
     if image_resource_urls:
         inp["files"] = [

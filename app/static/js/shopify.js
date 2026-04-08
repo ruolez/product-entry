@@ -8,6 +8,7 @@ const state = {
     collections: {},
     locations: {},
     publications: {},
+    watermarkInfo: {},
     productTypes: [],
     options: [],
     variants: [],
@@ -46,6 +47,7 @@ async function initShopifyOnce() {
     bindVariantEvents();
     bindMetafieldEvents();
     bindTagInput();
+    bindCollectionsSearch();
     bindSeoSync();
     bindActionButtons();
 }
@@ -62,7 +64,7 @@ function renderStoreSelector() {
             <span class="text-muted">No Shopify stores configured. Add stores in Settings.</span>`;
         return;
     }
-    const allSelected = state.selectedStoreIds.length === state.stores.length;
+    const allSelected = state.selectedStoreIds.length === state.stores.length && state.stores.length > 0;
     const chips = state.stores.map(s => {
         const sel = state.selectedStoreIds.includes(s.id);
         return `<button class="store-chip ${sel ? "selected" : ""}" data-id="${s.id}">${escapeHtml(s.name)}</button>`;
@@ -103,14 +105,16 @@ async function onStoreSelectionChange() {
     for (const sid of state.selectedStoreIds) {
         if (!state.collections[sid]) {
             try {
-                const [cols, locs, pubs] = await Promise.all([
+                const [cols, locs, pubs, wmInfo] = await Promise.all([
                     api.get(`/api/shopify/stores/${sid}/collections`),
                     api.get(`/api/shopify/stores/${sid}/locations`),
                     api.get(`/api/shopify/stores/${sid}/publications`),
+                    api.get(`/api/shopify/stores/${sid}/watermark-info`),
                 ]);
                 state.collections[sid] = cols;
                 state.locations[sid] = locs;
                 state.publications[sid] = pubs;
+                state.watermarkInfo[sid] = wmInfo;
             } catch (err) {
                 showToast(`Failed to load data for store ${sid}: ${err.message}`, "error");
             }
@@ -118,6 +122,8 @@ async function onStoreSelectionChange() {
     }
     renderInventoryLocations();
     renderPublications();
+    renderPerStoreMediaUI();
+    renderWatermarkPreviews();
 }
 
 // ── Quill Editor ───────────────────────────────────────
@@ -131,6 +137,7 @@ function initQuillEditor() {
                 [{ header: [1, 2, 3, false] }],
                 ["bold", "italic", "underline"],
                 [{ list: "ordered" }, { list: "bullet" }],
+                [{ align: [] }],
                 ["link", "image"],
                 ["clean"],
             ],
@@ -141,33 +148,45 @@ function initQuillEditor() {
     });
 }
 
-// ── Media Upload ───────────────────────────────────────
+// ── Media Upload (Shared) ──────────────────────────────
 function bindMediaUpload() {
     const zone = document.getElementById("sp-upload-zone");
     const fileInput = document.getElementById("sp-file-input");
 
-    zone.addEventListener("click", () => fileInput.click());
+    zone.addEventListener("click", (e) => {
+        if (e.target === fileInput) return;
+        fileInput.click();
+    });
     zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("drag-over"); });
     zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
     zone.addEventListener("drop", (e) => {
         e.preventDefault();
         zone.classList.remove("drag-over");
-        handleFiles(e.dataTransfer.files);
+        handleFiles(e.dataTransfer.files, "shared");
     });
     fileInput.addEventListener("change", () => {
-        handleFiles(fileInput.files);
+        handleFiles(fileInput.files, "shared");
         fileInput.value = "";
     });
 }
 
-function handleFiles(files) {
+function handleFiles(files, target) {
     for (const file of files) {
         if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) continue;
         const id = crypto.randomUUID();
         const reader = new FileReader();
         reader.onload = (e) => {
-            state.uploadedImages.push({ id, file, preview: e.target.result, name: file.name });
-            renderThumbnails();
+            const entry = { id, file, preview: e.target.result, name: file.name };
+            if (target === "shared") {
+                state.uploadedImages.push(entry);
+                renderThumbnails();
+                renderWatermarkPreviews();
+            } else {
+                const storeId = parseInt(target);
+                if (!state.perStoreImages[storeId]) state.perStoreImages[storeId] = [];
+                state.perStoreImages[storeId].push(entry);
+                renderPerStoreMediaUI();
+            }
         };
         reader.readAsDataURL(file);
     }
@@ -187,6 +206,7 @@ function renderThumbnails() {
             e.stopPropagation();
             state.uploadedImages = state.uploadedImages.filter(img => img.id !== btn.dataset.id);
             renderThumbnails();
+            renderWatermarkPreviews();
         });
     });
 }
@@ -199,6 +219,247 @@ function bindImageModeToggle() {
             state.imageMode = btn.dataset.mode;
             document.getElementById("sp-media-shared").classList.toggle("hidden", state.imageMode !== "shared");
             document.getElementById("sp-media-perstore").classList.toggle("hidden", state.imageMode !== "per_store");
+            if (state.imageMode === "per_store") renderPerStoreMediaUI();
+        });
+    });
+}
+
+// ── Per-Store Media ────────────────────────────────────
+function renderPerStoreMediaUI() {
+    if (state.imageMode !== "per_store") return;
+    const tabsContainer = document.getElementById("sp-media-store-tabs");
+    const areasContainer = document.getElementById("sp-perstore-upload-areas");
+
+    if (!state.selectedStoreIds.length) {
+        tabsContainer.innerHTML = '<span class="text-sm text-muted">Select stores above</span>';
+        areasContainer.innerHTML = "";
+        return;
+    }
+
+    const activeStoreId = state.selectedStoreIds[0];
+    tabsContainer.innerHTML = state.selectedStoreIds.map(sid => {
+        const store = state.stores.find(s => s.id === sid);
+        const count = (state.perStoreImages[sid] || []).length;
+        return `<button class="store-tab ${sid === activeStoreId ? "active" : ""}" data-store-id="${sid}">
+            ${escapeHtml(store?.name || "")} ${count ? `(${count})` : ""}
+        </button>`;
+    }).join("");
+
+    tabsContainer.querySelectorAll(".store-tab").forEach(tab => {
+        tab.addEventListener("click", () => {
+            tabsContainer.querySelectorAll(".store-tab").forEach(t => t.classList.remove("active"));
+            tab.classList.add("active");
+            renderPerStoreUploadArea(parseInt(tab.dataset.storeId));
+        });
+    });
+
+    renderPerStoreUploadArea(activeStoreId);
+}
+
+function renderPerStoreUploadArea(storeId) {
+    const container = document.getElementById("sp-perstore-upload-areas");
+    const images = state.perStoreImages[storeId] || [];
+
+    container.innerHTML = `
+        <div class="media-upload-zone" id="sp-perstore-zone-${storeId}" style="margin-top:var(--md-spacing-sm);">
+            <span class="material-icons-round" style="font-size:28px; margin-bottom:4px; display:block;">cloud_upload</span>
+            <span class="upload-label">Upload images for this store</span>
+            <input type="file" id="sp-perstore-file-${storeId}" multiple accept="image/*" style="display:none;">
+        </div>
+        <div class="media-thumbnails" style="margin-top:var(--md-spacing-sm);">
+            ${images.map((img, i) => `
+                <div class="media-thumb ${i === 0 ? "primary" : ""}" data-id="${img.id}">
+                    <img src="${img.preview}" alt="${escapeHtml(img.name)}">
+                    <button class="thumb-remove material-icons-round" data-id="${img.id}" data-store="${storeId}">close</button>
+                </div>
+            `).join("")}
+        </div>
+    `;
+
+    const zone = document.getElementById(`sp-perstore-zone-${storeId}`);
+    const fileInput = document.getElementById(`sp-perstore-file-${storeId}`);
+
+    zone.addEventListener("click", (e) => {
+        if (e.target === fileInput) return;
+        fileInput.click();
+    });
+    zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("drag-over"); });
+    zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
+    zone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        zone.classList.remove("drag-over");
+        handleFiles(e.dataTransfer.files, String(storeId));
+    });
+    fileInput.addEventListener("change", () => {
+        handleFiles(fileInput.files, String(storeId));
+        fileInput.value = "";
+    });
+
+    container.querySelectorAll(".thumb-remove").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const sid = parseInt(btn.dataset.store);
+            state.perStoreImages[sid] = (state.perStoreImages[sid] || []).filter(img => img.id !== btn.dataset.id);
+            renderPerStoreMediaUI();
+        });
+    });
+}
+
+// ── Watermark Preview (Canvas) ─────────────────────────
+function renderWatermarkPreviews() {
+    const container = document.getElementById("sp-watermark-previews");
+    if (!state.uploadedImages.length || !state.selectedStoreIds.length) {
+        container.innerHTML = "";
+        return;
+    }
+
+    const firstImage = state.uploadedImages[0];
+    const hasAnyWatermark = state.selectedStoreIds.some(sid => state.watermarkInfo[sid]?.has_watermark);
+    if (!hasAnyWatermark) {
+        container.innerHTML = "";
+        return;
+    }
+
+    container.innerHTML = state.selectedStoreIds.map(sid => {
+        const store = state.stores.find(s => s.id === sid);
+        const wm = state.watermarkInfo[sid];
+        return `<div class="watermark-card" data-store="${sid}">
+            <canvas id="wm-canvas-${sid}" width="120" height="120"></canvas>
+            <div class="store-label">${escapeHtml(store?.name || "")}</div>
+            <div class="text-sm" style="color:var(--md-on-surface-variant);">${wm?.has_watermark ? "Watermark applied" : "No watermark"}</div>
+        </div>`;
+    }).join("");
+
+    for (const sid of state.selectedStoreIds) {
+        const canvas = document.getElementById(`wm-canvas-${sid}`);
+        if (!canvas) continue;
+        const ctx = canvas.getContext("2d");
+        const wm = state.watermarkInfo[sid];
+
+        const img = new Image();
+        img.onload = () => {
+            const scale = Math.min(120 / img.width, 120 / img.height);
+            const w = img.width * scale;
+            const h = img.height * scale;
+            canvas.width = 120;
+            canvas.height = 120;
+            ctx.fillStyle = "#f8f9fa";
+            ctx.fillRect(0, 0, 120, 120);
+            ctx.drawImage(img, (120 - w) / 2, (120 - h) / 2, w, h);
+
+            if (wm?.has_watermark && wm.watermark_base64) {
+                const wmImg = new Image();
+                wmImg.onload = () => {
+                    const wmW = Math.max(w * 0.25, 20);
+                    const wmRatio = wmW / wmImg.width;
+                    const wmH = wmImg.height * wmRatio;
+                    const opacity = wm.opacity || 0.30;
+                    const pos = wm.position || "bottom-right";
+
+                    let x, y;
+                    const ox = (120 - w) / 2;
+                    const oy = (120 - h) / 2;
+                    if (pos === "bottom-right") { x = ox + w - wmW - 4; y = oy + h - wmH - 4; }
+                    else if (pos === "bottom-left") { x = ox + 4; y = oy + h - wmH - 4; }
+                    else if (pos === "top-right") { x = ox + w - wmW - 4; y = oy + 4; }
+                    else if (pos === "top-left") { x = ox + 4; y = oy + 4; }
+                    else { x = (120 - wmW) / 2; y = (120 - wmH) / 2; }
+
+                    ctx.globalAlpha = opacity;
+                    ctx.drawImage(wmImg, x, y, wmW, wmH);
+                    ctx.globalAlpha = 1;
+                };
+                wmImg.src = `data:image/png;base64,${wm.watermark_base64}`;
+            }
+        };
+        img.src = firstImage.preview;
+    }
+}
+
+// ── Collections Search/Select ──────────────────────────
+function bindCollectionsSearch() {
+    const input = document.getElementById("sp-collections-search");
+    const dropdown = document.getElementById("sp-collections-dropdown");
+
+    input.addEventListener("input", debounce(() => {
+        const query = input.value.trim().toLowerCase();
+        if (!query || query.length < 1) {
+            dropdown.classList.add("hidden");
+            return;
+        }
+
+        const allCollections = [];
+        for (const sid of state.selectedStoreIds) {
+            const cols = state.collections[sid] || [];
+            for (const col of cols) {
+                if (!allCollections.find(c => c.id === col.id)) {
+                    allCollections.push(col);
+                }
+            }
+        }
+
+        const filtered = allCollections
+            .filter(c => c.title.toLowerCase().includes(query))
+            .filter(c => !state.selectedCollections.find(sc => sc.id === c.id))
+            .slice(0, 10);
+
+        if (!filtered.length) {
+            dropdown.classList.add("hidden");
+            return;
+        }
+
+        dropdown.innerHTML = filtered.map(c => `
+            <div class="autocomplete-item" data-id="${c.id}" data-title="${escapeHtml(c.title)}">
+                <span class="ac-subcat">${escapeHtml(c.title)}</span>
+            </div>
+        `).join("");
+        dropdown.classList.remove("hidden");
+
+        dropdown.querySelectorAll(".autocomplete-item").forEach(item => {
+            item.addEventListener("click", () => {
+                state.selectedCollections.push({
+                    id: item.dataset.id,
+                    title: item.dataset.title,
+                });
+                input.value = "";
+                dropdown.classList.add("hidden");
+                renderCollectionChips();
+            });
+        });
+    }, 200));
+
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "Backspace" && !input.value && state.selectedCollections.length) {
+            state.selectedCollections.pop();
+            renderCollectionChips();
+        }
+        if (e.key === "Escape") {
+            dropdown.classList.add("hidden");
+        }
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!e.target.closest("#sp-collections-input") && !e.target.closest("#sp-collections-dropdown")) {
+            dropdown.classList.add("hidden");
+        }
+    });
+}
+
+function renderCollectionChips() {
+    const container = document.getElementById("sp-collections-input");
+    const chips = state.selectedCollections.map((col, i) => `
+        <span class="tag-chip">
+            ${escapeHtml(col.title)}
+            <span class="remove-tag material-icons-round" data-col-index="${i}">close</span>
+        </span>
+    `).join("");
+    container.innerHTML = chips + '<input type="text" class="tag-input" id="sp-collections-search" placeholder="Search collections...">';
+    bindCollectionsSearch();
+
+    container.querySelectorAll(".remove-tag").forEach(btn => {
+        btn.addEventListener("click", () => {
+            state.selectedCollections.splice(parseInt(btn.dataset.colIndex), 1);
+            renderCollectionChips();
         });
     });
 }
@@ -215,9 +476,7 @@ function renderInventoryLocations() {
     for (const sid of state.selectedStoreIds) {
         const store = state.stores.find(s => s.id === sid);
         const locs = state.locations[sid] || [];
-        if (state.selectedStoreIds.length > 1) {
-            html += `<div class="store-card-label" style="margin-top:var(--md-spacing-sm);">${escapeHtml(store?.name || "")}</div>`;
-        }
+        html += `<div class="store-card-label" style="margin-top:var(--md-spacing-sm);">${escapeHtml(store?.name || "")}</div>`;
         if (!locs.length) {
             html += '<p class="text-sm text-muted">No locations found</p>';
             continue;
@@ -241,22 +500,26 @@ function renderPublications() {
         return;
     }
 
-    const firstStoreId = state.selectedStoreIds[0];
-    const pubs = state.publications[firstStoreId] || [];
-    if (!pubs.length) {
-        container.innerHTML = '<p class="text-sm text-muted">No sales channels found</p>';
-        return;
-    }
+    let html = "";
+    for (const sid of state.selectedStoreIds) {
+        const store = state.stores.find(s => s.id === sid);
+        const pubs = state.publications[sid] || [];
+        if (!pubs.length) continue;
 
-    container.innerHTML = `
-        <div class="store-card-label">Sales channels</div>
-        ${pubs.map(pub => `
+        if (state.selectedStoreIds.length > 1) {
+            html += `<div class="store-card-label" style="margin-top:var(--md-spacing-sm);">${escapeHtml(store?.name || "")}</div>`;
+        } else {
+            html += '<div class="store-card-label">Sales channels</div>';
+        }
+        html += pubs.map(pub => `
             <label class="form-checkbox" style="margin:4px 0;">
-                <input type="checkbox" data-pub-id="${pub.id}" checked>
+                <input type="checkbox" data-store-id="${sid}" data-pub-id="${pub.id}" checked>
                 ${escapeHtml(pub.name)}
             </label>
-        `).join("")}
-    `;
+        `).join("");
+    }
+
+    container.innerHTML = html || '<p class="text-sm text-muted">No sales channels found</p>';
 }
 
 // ── Variants ───────────────────────────────────────────
@@ -266,7 +529,7 @@ function bindVariantEvents() {
             showToast("Maximum 3 options allowed", "warning");
             return;
         }
-        state.options.push({ name: "", values: [] });
+        state.options.push({ name: "", values: [], done: false });
         renderVariantOptions();
     });
 }
@@ -286,10 +549,31 @@ function renderVariantOptions() {
     addBtn.innerHTML = '<span class="material-icons-round" style="font-size:16px;">add</span> Add another option';
     addBtn.classList.toggle("hidden", state.options.length >= 3);
 
-    container.innerHTML = state.options.map((opt, i) => `
-        <div class="variant-option-card" data-index="${i}">
+    const validCount = state.options.filter(o => o.name && o.values.length).length;
+    const totalVariants = state.variants.length;
+
+    container.innerHTML = state.options.map((opt, i) => {
+        if (opt.done) {
+            return `<div class="variant-option-card" data-index="${i}" style="cursor:pointer;">
+                <div style="display:flex; align-items:center; justify-content:space-between;">
+                    <div>
+                        <strong style="font-size:0.875rem;">${escapeHtml(opt.name || "Option " + (i + 1))}</strong>
+                        <span class="text-sm text-muted" style="margin-left:8px;">${opt.values.length} value${opt.values.length !== 1 ? "s" : ""}: ${opt.values.map(v => escapeHtml(v)).join(", ")}</span>
+                    </div>
+                    <div class="flex gap-xs">
+                        <button class="btn btn-icon btn-secondary" data-edit-option="${i}" style="padding:4px;" title="Edit">
+                            <span class="material-icons-round" style="font-size:16px;">edit</span>
+                        </button>
+                        <button class="btn btn-icon btn-danger" data-remove-option="${i}" style="padding:4px;" title="Delete">
+                            <span class="material-icons-round" style="font-size:16px;">delete</span>
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        }
+        return `<div class="variant-option-card" data-index="${i}">
             <div class="option-header">
-                <span class="material-icons-round" style="font-size:18px; color:var(--md-on-surface-variant); cursor:grab;">drag_indicator</span>
+                <span class="material-icons-round" style="font-size:18px; color:var(--md-on-surface-variant);">drag_indicator</span>
                 <div class="form-group" style="flex:1; margin:0;">
                     <label>Option name</label>
                     <input type="text" class="form-input" value="${escapeHtml(opt.name)}" placeholder="e.g. Size, Color"
@@ -307,15 +591,29 @@ function renderVariantOptions() {
                         <span class="remove-value material-icons-round" data-option="${i}" data-value-index="${vi}">close</span>
                     </span>
                 `).join("")}
-                <input type="text" class="option-value-input" placeholder="Add value..." data-option-index="${i}">
+                <input type="text" class="option-value-input" placeholder="Add value and press Enter..." data-option-index="${i}">
             </div>
-        </div>
-    `).join("");
+            <div style="display:flex; justify-content:flex-end; margin-top:var(--md-spacing-sm);">
+                <button class="btn btn-primary" data-done-option="${i}" style="padding:6px 16px; font-size:0.8125rem;"
+                        ${!opt.name || !opt.values.length ? "disabled" : ""}>Done</button>
+            </div>
+        </div>`;
+    }).join("");
+
+    if (totalVariants > 0) {
+        const summary = document.createElement("div");
+        summary.className = "text-sm text-muted";
+        summary.style.marginTop = "var(--md-spacing-xs)";
+        summary.textContent = `${totalVariants} variant${totalVariants !== 1 ? "s" : ""} will be created`;
+        container.appendChild(summary);
+    }
 
     container.querySelectorAll('[data-field="name"]').forEach(input => {
-        input.addEventListener("change", (e) => {
-            state.options[parseInt(input.dataset.optionIndex)].name = input.value;
-            generateVariants();
+        input.addEventListener("input", () => {
+            const idx = parseInt(input.dataset.optionIndex);
+            state.options[idx].name = input.value;
+            const doneBtn = container.querySelector(`[data-done-option="${idx}"]`);
+            if (doneBtn) doneBtn.disabled = !input.value || !state.options[idx].values.length;
         });
     });
 
@@ -351,6 +649,25 @@ function renderVariantOptions() {
             generateVariants();
         });
     });
+
+    container.querySelectorAll("[data-done-option]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const idx = parseInt(btn.dataset.doneOption);
+            if (state.options[idx].name && state.options[idx].values.length) {
+                state.options[idx].done = true;
+                renderVariantOptions();
+                generateVariants();
+            }
+        });
+    });
+
+    container.querySelectorAll("[data-edit-option]").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            state.options[parseInt(btn.dataset.editOption)].done = false;
+            renderVariantOptions();
+        });
+    });
 }
 
 function generateVariants() {
@@ -370,15 +687,20 @@ function generateVariants() {
     const sku = document.getElementById("sp-sku").value || "";
     const barcode = document.getElementById("sp-barcode").value || "";
 
-    state.variants = cartesian.map((combo, i) => ({
-        optionValues: combo,
-        title: combo.map(c => c.name).join(" / "),
-        price: state.variants[i]?.price ?? price,
-        compareAtPrice: state.variants[i]?.compareAtPrice ?? "",
-        cost: state.variants[i]?.cost ?? cost,
-        sku: state.variants[i]?.sku ?? (sku ? `${sku}-${i + 1}` : ""),
-        barcode: state.variants[i]?.barcode ?? barcode,
-    }));
+    const oldVariants = new Map(state.variants.map(v => [v.title, v]));
+    state.variants = cartesian.map((combo) => {
+        const title = combo.map(c => c.name).join(" / ");
+        const existing = oldVariants.get(title);
+        return {
+            optionValues: combo,
+            title,
+            price: existing?.price ?? price,
+            compareAtPrice: existing?.compareAtPrice ?? "",
+            cost: existing?.cost ?? cost,
+            sku: existing?.sku ?? "",
+            barcode: existing?.barcode ?? barcode,
+        };
+    });
 
     renderVariantTable();
 }
@@ -396,11 +718,11 @@ function renderVariantTable() {
             <thead>
                 <tr>
                     <th>Variant</th>
-                    <th>Price</th>
-                    <th>Compare-at</th>
-                    <th>Cost</th>
-                    <th>SKU</th>
-                    <th>Barcode</th>
+                    <th style="width:90px;">Price</th>
+                    <th style="width:90px;">Compare-at</th>
+                    <th style="width:90px;">Cost</th>
+                    <th style="width:100px;">SKU</th>
+                    <th style="width:100px;">Barcode</th>
                 </tr>
             </thead>
             <tbody>
@@ -421,8 +743,7 @@ function renderVariantTable() {
     container.querySelectorAll("input").forEach(input => {
         input.addEventListener("change", () => {
             const idx = parseInt(input.dataset.index);
-            const field = input.dataset.field;
-            state.variants[idx][field] = input.value;
+            state.variants[idx][input.dataset.field] = input.value;
         });
     });
 }
@@ -471,11 +792,12 @@ function renderMetafields() {
 // ── Tags ───────────────────────────────────────────────
 function bindTagInput() {
     const input = document.getElementById("sp-tags-input");
+    if (!input) return;
     input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && input.value.trim()) {
+        if ((e.key === "Enter" || e.key === ",") && input.value.trim()) {
             e.preventDefault();
-            const tag = input.value.trim();
-            if (!state.tags.includes(tag)) {
+            const tag = input.value.trim().replace(/,$/,"");
+            if (tag && !state.tags.includes(tag)) {
                 state.tags.push(tag);
                 renderTags();
             }
@@ -489,7 +811,6 @@ function bindTagInput() {
 
 function renderTags() {
     const container = document.getElementById("sp-tags-container");
-    const input = container.querySelector(".tag-input");
     const chips = state.tags.map((tag, i) => `
         <span class="tag-chip">
             ${escapeHtml(tag)}
@@ -515,18 +836,18 @@ function bindSeoSync() {
     const seoDesc = document.getElementById("sp-seo-description");
 
     titleInput.addEventListener("input", debounce(() => {
-        if (!seoTitle.value) {
+        if (!seoTitle._userEdited) {
             seoTitle.value = titleInput.value;
         }
-        if (!seoHandle.value) {
+        if (!seoHandle._userEdited) {
             seoHandle.value = titleInput.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
         }
         updateSeoPreview();
     }, 300));
 
-    [seoTitle, seoDesc, seoHandle].forEach(el => {
-        el.addEventListener("input", debounce(updateSeoPreview, 300));
-    });
+    seoTitle.addEventListener("input", () => { seoTitle._userEdited = true; updateSeoPreview(); });
+    seoHandle.addEventListener("input", () => { seoHandle._userEdited = true; updateSeoPreview(); });
+    seoDesc.addEventListener("input", debounce(updateSeoPreview, 300));
 }
 
 function updateSeoPreview() {
@@ -545,40 +866,65 @@ function bindActionButtons() {
     document.getElementById("sp-btn-clear").addEventListener("click", clearForm);
 }
 
-async function saveProduct() {
+function validateForm() {
+    let valid = true;
     const title = document.getElementById("sp-title").value.trim();
+    const titleError = document.getElementById("sp-error-title");
+
     if (!title) {
-        showToast("Product title is required", "warning");
-        document.getElementById("sp-error-title").textContent = "Title is required";
+        titleError.textContent = "Title is required";
         document.getElementById("sp-title").focus();
-        return;
+        valid = false;
+    } else {
+        titleError.textContent = "";
     }
-    document.getElementById("sp-error-title").textContent = "";
 
     if (!state.selectedStoreIds.length) {
         showToast("Select at least one store", "warning");
-        return;
+        valid = false;
     }
+
+    const handle = document.getElementById("sp-seo-handle").value.trim();
+    if (handle && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(handle)) {
+        showToast("URL handle must be lowercase letters, numbers, and hyphens", "warning");
+        valid = false;
+    }
+
+    return valid;
+}
+
+async function saveProduct() {
+    if (!validateForm()) return;
 
     const saveBtn = document.getElementById("sp-btn-save");
     const origHtml = saveBtn.innerHTML;
     saveBtn.disabled = true;
-    saveBtn.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px;"></span> Saving...';
 
     try {
         let imageIds = [];
-        if (state.uploadedImages.length) {
+        let perStoreImageIds = {};
+
+        if (state.imageMode === "shared" && state.uploadedImages.length) {
+            saveBtn.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px;"></span> Uploading images...';
             const formData = new FormData();
-            state.uploadedImages.forEach((img, i) => {
-                formData.append(`image_${i}`, img.file);
-            });
-            const uploadResp = await fetch("/api/shopify/upload-images", {
-                method: "POST",
-                body: formData,
-            });
+            state.uploadedImages.forEach((img, i) => formData.append(`image_${i}`, img.file));
+            const uploadResp = await fetch("/api/shopify/upload-images", { method: "POST", body: formData });
             const uploadData = await uploadResp.json();
             imageIds = (uploadData.images || []).map(i => i.id);
+        } else if (state.imageMode === "per_store") {
+            saveBtn.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px;"></span> Uploading images...';
+            for (const sid of state.selectedStoreIds) {
+                const storeImages = state.perStoreImages[sid] || [];
+                if (!storeImages.length) continue;
+                const formData = new FormData();
+                storeImages.forEach((img, i) => formData.append(`image_${i}`, img.file));
+                const uploadResp = await fetch("/api/shopify/upload-images", { method: "POST", body: formData });
+                const uploadData = await uploadResp.json();
+                perStoreImageIds[sid] = (uploadData.images || []).map(i => i.id);
+            }
         }
+
+        saveBtn.innerHTML = `<span class="spinner" style="width:18px;height:18px;border-width:2px;"></span> Saving to ${state.selectedStoreIds.length} store${state.selectedStoreIds.length > 1 ? "s" : ""}...`;
 
         const productData = collectFormData();
         const result = await api.post("/api/shopify/products", {
@@ -586,6 +932,7 @@ async function saveProduct() {
             product_data: productData,
             image_ids: imageIds,
             image_mode: state.imageMode,
+            per_store_image_ids: perStoreImageIds,
         });
 
         if (result.stores_succeeded?.length) {
@@ -600,7 +947,7 @@ async function saveProduct() {
         showToast(`Save failed: ${err.message}`, "error");
     }
 
-    saveBtn.disabled = false;
+    saveBtn.disabled = state.selectedStoreIds.length === 0;
     saveBtn.innerHTML = origHtml;
 }
 
@@ -643,6 +990,9 @@ function collectFormData() {
     const sku = document.getElementById("sp-sku").value.trim();
     const barcode = document.getElementById("sp-barcode").value.trim();
     const taxable = document.getElementById("sp-charge-tax").checked;
+    const trackInventory = document.getElementById("sp-track-inventory").checked;
+    const continueSelling = document.getElementById("sp-continue-selling").checked;
+    const inventoryPolicy = continueSelling ? "CONTINUE" : "DENY";
 
     if (state.options.length && state.variants.length) {
         product.productOptions = state.options
@@ -655,7 +1005,11 @@ function collectFormData() {
             optionValues: v.optionValues,
             price: parseFloat(v.price) || 0,
             compareAtPrice: v.compareAtPrice ? parseFloat(v.compareAtPrice) : undefined,
-            inventoryItem: v.cost ? { cost: parseFloat(v.cost) } : undefined,
+            inventoryItem: {
+                tracked: trackInventory,
+                cost: v.cost ? parseFloat(v.cost) : undefined,
+            },
+            inventoryPolicy,
             sku: v.sku || undefined,
             barcode: v.barcode || undefined,
             taxable,
@@ -664,7 +1018,11 @@ function collectFormData() {
         product.variants = [{
             price: parseFloat(price) || 0,
             compareAtPrice: compareAt ? parseFloat(compareAt) : undefined,
-            inventoryItem: cost ? { cost: parseFloat(cost) } : undefined,
+            inventoryItem: {
+                tracked: trackInventory,
+                cost: cost ? parseFloat(cost) : undefined,
+            },
+            inventoryPolicy,
             sku: sku || undefined,
             barcode: barcode || undefined,
             taxable,
@@ -672,24 +1030,52 @@ function collectFormData() {
         }];
     }
 
-    const locationQuantities = {};
+    const perStoreInventory = {};
     document.querySelectorAll("#sp-inventory-locations input[data-location]").forEach(input => {
         const qty = parseInt(input.value) || 0;
         if (qty > 0) {
-            locationQuantities[input.dataset.location] = qty;
+            const sid = input.dataset.store;
+            if (!perStoreInventory[sid]) perStoreInventory[sid] = {};
+            perStoreInventory[sid][input.dataset.location] = qty;
         }
     });
 
-    const publicationIds = [];
-    document.querySelectorAll("#sp-publications input[data-pub-id]:checked").forEach(input => {
-        publicationIds.push(input.dataset.pubId);
+    const perStorePublications = {};
+    document.querySelectorAll("#sp-publications input[data-pub-id]").forEach(input => {
+        const sid = input.dataset.storeId;
+        if (!perStorePublications[sid]) perStorePublications[sid] = [];
+        if (input.checked) {
+            perStorePublications[sid].push(input.dataset.pubId);
+        }
     });
 
-    return {
+    const result = {
         product,
-        inventory: { location_quantities: locationQuantities },
-        publication_ids: publicationIds,
+        inventory: { per_store: perStoreInventory },
+        per_store_publications: perStorePublications,
     };
+
+    const isPhysical = document.getElementById("sp-physical-product").checked;
+    if (isPhysical) {
+        const weight = parseFloat(document.getElementById("sp-weight").value);
+        const weightUnit = document.getElementById("sp-weight-unit").value.toUpperCase();
+        const countryOfOrigin = document.getElementById("sp-country-origin").value.trim();
+        const hsCode = document.getElementById("sp-hs-code").value.trim();
+
+        if (weight > 0) {
+            result.shipping = { weight, weightUnit };
+        }
+        if (countryOfOrigin) {
+            result.shipping = result.shipping || {};
+            result.shipping.countryOfOrigin = countryOfOrigin;
+        }
+        if (hsCode) {
+            result.shipping = result.shipping || {};
+            result.shipping.hsCode = hsCode;
+        }
+    }
+
+    return result;
 }
 
 function clearForm() {
@@ -697,6 +1083,7 @@ function clearForm() {
     if (state.quill) state.quill.setText("");
     state.descriptionHtml = "";
     state.uploadedImages = [];
+    state.perStoreImages = {};
     renderThumbnails();
     document.getElementById("sp-price").value = "";
     document.getElementById("sp-compare-at-price").value = "";
@@ -708,14 +1095,17 @@ function clearForm() {
     document.getElementById("sp-continue-selling").checked = false;
     document.getElementById("sp-physical-product").checked = true;
     document.getElementById("sp-weight").value = "";
+    document.getElementById("sp-weight-unit").value = "lb";
     document.getElementById("sp-country-origin").value = "";
     document.getElementById("sp-hs-code").value = "";
     document.getElementById("sp-status").value = "DRAFT";
     document.getElementById("sp-product-type").value = "";
     document.getElementById("sp-vendor").value = "";
     document.getElementById("sp-seo-title").value = "";
+    document.getElementById("sp-seo-title")._userEdited = false;
     document.getElementById("sp-seo-description").value = "";
     document.getElementById("sp-seo-handle").value = "";
+    document.getElementById("sp-seo-handle")._userEdited = false;
     document.getElementById("sp-template").value = "";
     document.getElementById("sp-category").value = "";
 
@@ -728,9 +1118,12 @@ function clearForm() {
     renderVariantOptions();
     renderMetafields();
     renderTags();
+    renderCollectionChips();
     updateSeoPreview();
     renderInventoryLocations();
+    renderPerStoreMediaUI();
 
     document.getElementById("sp-error-title").textContent = "";
+    document.getElementById("sp-watermark-previews").innerHTML = "";
     showToast("Form cleared", "info");
 }

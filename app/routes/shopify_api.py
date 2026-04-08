@@ -4,13 +4,17 @@ from flask import Blueprint, jsonify, request
 
 from services.shopify_service import (
     get_all_shopify_stores,
+    get_shopify_store,
     get_collections,
     get_locations,
     get_publications,
     get_product_types,
     push_to_stores,
-    staged_uploads_create,
-    upload_file_to_staged_target,
+)
+from services.shopify_image_service import (
+    process_images_for_store,
+    upload_images_to_store,
+    get_watermark_base64,
 )
 
 shopify_bp = Blueprint("shopify", __name__)
@@ -63,6 +67,20 @@ def store_product_types(store_id):
         return jsonify({"error": str(e)}), 500
 
 
+@shopify_bp.route("/stores/<int:store_id>/watermark-info")
+def store_watermark_info(store_id):
+    b64 = get_watermark_base64(store_id)
+    if not b64:
+        return jsonify({"has_watermark": False})
+    store = get_shopify_store(store_id)
+    return jsonify({
+        "has_watermark": True,
+        "watermark_base64": b64,
+        "position": store.get("watermark_position", "bottom-right"),
+        "opacity": float(store.get("watermark_opacity", 0.30)),
+    })
+
+
 @shopify_bp.route("/upload-images", methods=["POST"])
 def upload_images():
     uploaded = []
@@ -88,54 +106,48 @@ def create_product():
     product_data = data.get("product_data", {})
     image_ids = data.get("image_ids", [])
     image_mode = data.get("image_mode", "shared")
+    per_store_image_ids = data.get("per_store_image_ids", {})
 
     if not store_ids:
         return jsonify({"error": "No stores selected"}), 400
     if not product_data.get("product", {}).get("title"):
         return jsonify({"error": "Product title is required"}), 400
 
-    image_resource_urls = None
-    if image_ids:
-        first_store_id = store_ids[0]
-        resource_urls = _upload_images_to_shopify(first_store_id, image_ids)
-        image_resource_urls = resource_urls
+    raw_images = _collect_raw_images(image_ids)
+
+    per_store_urls = {}
+    if image_mode == "shared" and raw_images:
+        for sid in store_ids:
+            processed = process_images_for_store(sid, raw_images)
+            urls = upload_images_to_store(sid, processed)
+            per_store_urls[sid] = urls
+    elif image_mode == "per_store":
+        for sid in store_ids:
+            sid_key = str(sid)
+            store_img_ids = per_store_image_ids.get(sid_key, [])
+            store_images = _collect_raw_images(store_img_ids)
+            if store_images:
+                urls = upload_images_to_store(sid, store_images)
+                per_store_urls[sid] = urls
 
     try:
-        results = push_to_stores(store_ids, product_data, image_resource_urls)
+        results = push_to_stores(store_ids, product_data, per_store_urls)
         _cleanup_temp_images(image_ids)
+        for ids in per_store_image_ids.values():
+            _cleanup_temp_images(ids)
         return jsonify(results)
     except Exception as e:
         _cleanup_temp_images(image_ids)
         return jsonify({"error": str(e)}), 500
 
 
-def _upload_images_to_shopify(store_id, image_ids):
-    files_info = []
-    valid_images = []
+def _collect_raw_images(image_ids):
+    images = []
     for img_id in image_ids:
         img = _temp_images.get(img_id)
-        if not img:
-            continue
-        valid_images.append(img)
-        files_info.append({
-            "filename": img["filename"],
-            "mimeType": img["content_type"],
-            "resource": "PRODUCT_IMAGE",
-            "httpMethod": "POST",
-        })
-
-    if not files_info:
-        return []
-
-    targets = staged_uploads_create(store_id, files_info)
-    resource_urls = []
-    for target, img in zip(targets, valid_images):
-        url = upload_file_to_staged_target(
-            target, img["bytes"], img["filename"], img["content_type"]
-        )
-        resource_urls.append(url)
-
-    return resource_urls
+        if img:
+            images.append(img)
+    return images
 
 
 def _cleanup_temp_images(image_ids):
