@@ -25,24 +25,7 @@ WT_WIDTH=70
 WT_MENU_HEIGHT=10
 
 # Full color scheme: red title/border, white text, blue background
-export NEWT_COLORS='
-root=,blue
-roottext=white,blue
-window=white,red
-border=white,red
-title=white,red
-textbox=black,white
-actbutton=white,red
-button=black,white
-compactbutton=black,white
-checkbox=black,white
-actcheckbox=white,red
-listbox=black,white
-actlistbox=white,red
-actsellistbox=white,red
-entry=black,white
-label=white,red
-'
+export NEWT_COLORS='root=,blue;roottext=white,blue;window=white,red;border=white,red;title=white,red;textbox=black,white;actbutton=white,red;button=black,white;compactbutton=black,white;checkbox=black,white;actcheckbox=white,red;listbox=black,white;actlistbox=white,red;actsellistbox=white,red;entry=black,white;label=white,red'
 
 # ── Root check ──────────────────────────────────────────
 if [ "$EUID" -ne 0 ]; then
@@ -138,16 +121,18 @@ run_with_progress() {
 }
 
 # ── Gauge helper ────────────────────────────────────────
-# Whiptail gauge shows text between XXX markers as a single block.
-# We format: PHASE header on line 1, detail on line 2.
+# Whiptail gauge reads: percentage, then XXX, then text lines, then XXX
 gauge_msg() {
     local pct="$1"
     local phase="$2"
     local detail="$3"
     echo "$pct"
     echo "XXX"
-    echo "${phase}"
-    [ -n "$detail" ] && echo "${detail}"
+    if [ -n "$detail" ]; then
+        printf '%s\n\n%s\n' "$phase" "$detail"
+    else
+        echo "$phase"
+    fi
     echo "XXX"
 }
 
@@ -510,7 +495,7 @@ Proceed with installation?" \
         gauge_msg 100 "Installation complete!" "All services running at http://${server_ip}"
         sleep 1
 
-    } | whiptail --gauge "Preparing..." 12 $WT_WIDTH 0 --title "Installing ${APP_TITLE}"
+    } | whiptail --gauge "Preparing..." 14 $WT_WIDTH 0 --title "Installing ${APP_TITLE}"
 
     # ── Result ────────────────────────────────────────
     if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
@@ -731,7 +716,7 @@ Proceed?" \
         gauge_msg 100 "Update complete!" "All services running at http://${server_ip}"
         sleep 1
 
-    } | whiptail --gauge "Preparing..." 12 $WT_WIDTH 0 --title "Updating ${APP_TITLE}"
+    } | whiptail --gauge "Preparing..." 14 $WT_WIDTH 0 --title "Updating ${APP_TITLE}"
 
     # Verify data
     local store_count formula_count
@@ -837,7 +822,7 @@ do_remove() {
         echo "XXX"
         sleep 1
 
-    } | whiptail --gauge "Removing ${APP_TITLE}..." 12 $WT_WIDTH 0 --title "Removing"
+    } | whiptail --gauge "Removing ${APP_TITLE}..." 14 $WT_WIDTH 0 --title "Removing"
 
     local data_msg="Database data has been PRESERVED in Docker volume.\nReinstall to reconnect to your existing data."
     if [ "$remove_data" = true ]; then
