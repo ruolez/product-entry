@@ -26,7 +26,7 @@ def get_all_stores(active_only=True):
     sql = "SELECT * FROM stores"
     if active_only:
         sql += " WHERE is_active = TRUE"
-    sql += " ORDER BY sort_order, name"
+    sql += " ORDER BY is_primary DESC, sort_order, name"
     result = db.session.execute(db.text(sql))
     rows = result.mappings().all()
     return [dict(r) for r in rows]

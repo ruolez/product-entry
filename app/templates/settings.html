@@ -33,7 +33,7 @@
 
     .store-card {
         display: grid;
-        grid-template-columns: 1fr 1fr 80px 1fr 1fr auto auto;
+        grid-template-columns: 1fr 1fr 80px 1fr 1fr auto auto auto;
         gap: var(--md-spacing-sm);
         align-items: center;
         padding: var(--md-spacing-md);
@@ -152,6 +152,33 @@
     .status-badge.success { background: var(--md-success-light); color: var(--md-success); }
     .status-badge.error { background: var(--md-error-light); color: var(--md-error); }
     .status-badge.pending { background: var(--md-surface-variant); color: var(--md-on-surface-variant); }
+
+    .primary-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: var(--md-radius-xl);
+        font-size: 0.7rem;
+        font-weight: 500;
+        font-family: var(--md-font-family);
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: all 0.2s;
+        background: none;
+    }
+    .primary-badge.is-primary {
+        background: #fff8e1;
+        color: #f9a825;
+        border-color: #f9a825;
+    }
+    .primary-badge:not(.is-primary) {
+        background: var(--md-surface-variant);
+        color: var(--md-on-surface-variant);
+    }
+    .primary-badge:not(.is-primary):hover {
+        border-color: var(--md-outline);
+    }
 
     @media (max-width: 900px) {
         .store-card { grid-template-columns: 1fr 1fr; }
@@ -349,6 +376,14 @@ function renderStores() {
                     ${s.is_active ? 'Active' : 'Inactive'}
                 </span>
             </div>
+            <div>
+                <button class="primary-badge ${s.is_primary ? 'is-primary' : ''}"
+                        onclick="togglePrimary(${s.id}, ${!s.is_primary})"
+                        title="${s.is_primary ? 'Primary store' : 'Set as primary'}">
+                    <span class="material-icons-round" style="font-size:14px;">${s.is_primary ? 'star' : 'star_outline'}</span>
+                    ${s.is_primary ? 'Primary' : 'Set Primary'}
+                </button>
+            </div>
             <div class="flex gap-xs">
                 <button class="btn btn-icon btn-secondary" onclick="editStore(${s.id})" title="Edit">
                     <span class="material-icons-round" style="font-size:16px;">edit</span>
@@ -453,6 +488,16 @@ window.testStoreConnection = async function(id, btn) {
         showToast(`Error: ${err.data?.message || err.message}`, "error");
     }
     btn.innerHTML = origHtml;
+};
+
+window.togglePrimary = async function(id, setPrimary) {
+    try {
+        await api.put(`/api/settings/stores/${id}`, { is_primary: setPrimary });
+        showToast(setPrimary ? "Store set as primary" : "Primary flag removed", "success");
+        await loadStores();
+    } catch (err) {
+        showToast(`Error: ${err.message}`, "error");
+    }
 };
 
 // ── PRICE FORMULAS ──

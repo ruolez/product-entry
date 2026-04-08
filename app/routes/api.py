@@ -29,7 +29,7 @@ def health():
 def list_stores():
     stores = get_all_stores(active_only=True)
     return jsonify([
-        {"id": s["id"], "name": s["name"], "is_active": s["is_active"]}
+        {"id": s["id"], "name": s["name"], "is_active": s["is_active"], "is_primary": s["is_primary"]}
         for s in stores
     ])
 

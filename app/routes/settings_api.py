@@ -35,10 +35,14 @@ def create_store():
             return jsonify({"error": f"{field} is required"}), 400
 
     password_enc = encrypt_password(data["password"])
+    if data.get("is_primary"):
+        db.session.execute(
+            db.text("UPDATE stores SET is_primary = FALSE, updated_at = NOW() WHERE is_primary = TRUE")
+        )
     result = db.session.execute(
         db.text(
-            "INSERT INTO stores (name, host, port, database_name, username, password_enc, is_active, sort_order) "
-            "VALUES (:name, :host, :port, :db, :user, :pass, :active, :sort) "
+            "INSERT INTO stores (name, host, port, database_name, username, password_enc, is_active, is_primary, sort_order) "
+            "VALUES (:name, :host, :port, :db, :user, :pass, :active, :primary, :sort) "
             "RETURNING id"
         ),
         {
@@ -49,6 +53,7 @@ def create_store():
             "user": data["username"],
             "pass": password_enc,
             "active": data.get("is_active", True),
+            "primary": data.get("is_primary", False),
             "sort": data.get("sort_order", 0),
         },
     )
@@ -67,7 +72,7 @@ def update_store(store_id):
     updates = []
     params = {"id": store_id}
 
-    for field in ["name", "host", "port", "database_name", "username", "is_active", "sort_order"]:
+    for field in ["name", "host", "port", "database_name", "username", "is_active", "is_primary", "sort_order"]:
         if field in data:
             updates.append(f"{field} = :{field}")
             params[field] = data[field]
@@ -75,6 +80,12 @@ def update_store(store_id):
     if "password" in data and data["password"]:
         updates.append("password_enc = :password_enc")
         params["password_enc"] = encrypt_password(data["password"])
+
+    if data.get("is_primary"):
+        db.session.execute(
+            db.text("UPDATE stores SET is_primary = FALSE, updated_at = NOW() WHERE is_primary = TRUE AND id != :id"),
+            {"id": store_id},
+        )
 
     if not updates:
         return jsonify({"error": "No fields to update"}), 400
