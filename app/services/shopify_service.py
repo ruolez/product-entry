@@ -82,101 +82,84 @@ def get_collections(store_id):
     query = """
     {
         collections(first: 250) {
-            edges {
-                node {
-                    id
-                    title
-                    handle
-                }
+            nodes {
+                id
+                title
+                handle
             }
         }
     }
     """
     data = execute_graphql(store_id, query)
-    edges = data.get("collections", {}).get("edges", [])
-    return [edge["node"] for edge in edges]
+    return data.get("collections", {}).get("nodes", [])
 
 
 def get_locations(store_id):
     query = """
     {
         locations(first: 50) {
-            edges {
-                node {
-                    id
-                    name
-                    isActive
-                }
+            nodes {
+                id
+                name
+                isActive
             }
         }
     }
     """
     data = execute_graphql(store_id, query)
-    edges = data.get("locations", {}).get("edges", [])
-    return [edge["node"] for edge in edges if edge["node"].get("isActive", True)]
+    nodes = data.get("locations", {}).get("nodes", [])
+    return [loc for loc in nodes if loc.get("isActive", True)]
 
 
 def get_publications(store_id):
     query = """
     {
         publications(first: 50) {
-            edges {
-                node {
-                    id
-                    name
-                }
+            nodes {
+                id
+                name
             }
         }
     }
     """
     data = execute_graphql(store_id, query)
-    edges = data.get("publications", {}).get("edges", [])
-    return [edge["node"] for edge in edges]
+    return data.get("publications", {}).get("nodes", [])
 
 
 def get_product_types(store_id):
     query = """
     {
         productTypes(first: 250) {
-            edges {
-                node
-            }
+            nodes
         }
     }
     """
     data = execute_graphql(store_id, query)
-    edges = data.get("productTypes", {}).get("edges", [])
-    return [edge["node"] for edge in edges]
+    return data.get("productTypes", {}).get("nodes", [])
 
 
 def get_vendors(store_id):
     query = """
     {
         productVendors(first: 250) {
-            edges {
-                node
-            }
+            nodes
         }
     }
     """
     data = execute_graphql(store_id, query)
-    edges = data.get("productVendors", {}).get("edges", [])
-    return [edge["node"] for edge in edges]
+    return data.get("productVendors", {}).get("nodes", [])
 
 
 def get_tags(store_id):
     query = """
     {
         productTags(first: 250) {
-            edges {
-                node
-            }
+            nodes
         }
     }
     """
     data = execute_graphql(store_id, query)
-    edges = data.get("productTags", {}).get("edges", [])
-    return [edge["node"] for edge in edges]
+    return data.get("productTags", {}).get("nodes", [])
 
 
 def staged_uploads_create(store_id, files_info):

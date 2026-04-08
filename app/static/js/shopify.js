@@ -107,28 +107,32 @@ async function onStoreSelectionChange() {
     document.getElementById("sp-btn-save").disabled = count === 0;
 
     for (const sid of state.selectedStoreIds) {
-        if (!state.collections[sid]) {
-            const safe = (promise) => promise.catch(() => null);
-            try {
-                const [cols, locs, pubs, wmInfo, vendors, types, tags] = await Promise.all([
-                    safe(api.get(`/api/shopify/stores/${sid}/collections`)),
-                    safe(api.get(`/api/shopify/stores/${sid}/locations`)),
-                    safe(api.get(`/api/shopify/stores/${sid}/publications`)),
-                    safe(api.get(`/api/shopify/stores/${sid}/watermark-info`)),
-                    safe(api.get(`/api/shopify/stores/${sid}/vendors`)),
-                    safe(api.get(`/api/shopify/stores/${sid}/product-types`)),
-                    safe(api.get(`/api/shopify/stores/${sid}/tags`)),
-                ]);
-                state.collections[sid] = cols || [];
-                state.locations[sid] = locs || [];
-                state.publications[sid] = pubs || [];
-                state.watermarkInfo[sid] = wmInfo || {};
-                for (const v of (vendors || [])) { if (!state.vendors.includes(v)) state.vendors.push(v); }
-                for (const t of (types || [])) { if (!state.productTypes.includes(t)) state.productTypes.push(t); }
-                for (const t of (tags || [])) { if (!state.existingTags.includes(t)) state.existingTags.push(t); }
-            } catch (err) {
-                showToast(`Failed to load data for store ${sid}: ${err.message}`, "error");
-            }
+        if (state._loaded && state._loaded[sid]) continue;
+        const safe = (label, promise) => promise.catch(err => {
+            console.warn(`Shopify ${label} failed for store ${sid}:`, err.message || err);
+            return null;
+        });
+        try {
+            const [cols, locs, pubs, wmInfo, vendors, types, tags] = await Promise.all([
+                safe("collections", api.get(`/api/shopify/stores/${sid}/collections`)),
+                safe("locations", api.get(`/api/shopify/stores/${sid}/locations`)),
+                safe("publications", api.get(`/api/shopify/stores/${sid}/publications`)),
+                safe("watermark", api.get(`/api/shopify/stores/${sid}/watermark-info`)),
+                safe("vendors", api.get(`/api/shopify/stores/${sid}/vendors`)),
+                safe("product-types", api.get(`/api/shopify/stores/${sid}/product-types`)),
+                safe("tags", api.get(`/api/shopify/stores/${sid}/tags`)),
+            ]);
+            state.collections[sid] = cols || [];
+            state.locations[sid] = locs || [];
+            state.publications[sid] = pubs || [];
+            state.watermarkInfo[sid] = wmInfo || {};
+            for (const v of (vendors || [])) { if (!state.vendors.includes(v)) state.vendors.push(v); }
+            for (const t of (types || [])) { if (!state.productTypes.includes(t)) state.productTypes.push(t); }
+            for (const t of (tags || [])) { if (!state.existingTags.includes(t)) state.existingTags.push(t); }
+            if (!state._loaded) state._loaded = {};
+            state._loaded[sid] = true;
+        } catch (err) {
+            showToast(`Failed to load data for store ${sid}: ${err.message}`, "error");
         }
     }
     renderInventoryLocations();
