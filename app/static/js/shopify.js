@@ -1365,7 +1365,6 @@ function clearForm() {
     document.getElementById("sp-seo-handle").value = "";
     document.getElementById("sp-seo-handle")._userEdited = false;
     document.getElementById("sp-template").value = "";
-    document.getElementById("sp-category").value = "";
 
     state.options = [];
     state.variants = [];
