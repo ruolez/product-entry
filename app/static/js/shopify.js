@@ -1306,6 +1306,7 @@ function collectFormData() {
             taxable,
         }));
     } else {
+        product.productOptions = [{ name: "Title", values: [{ name: "Default Title" }] }];
         product.variants = [{
             price: parseFloat(price) || 0,
             compareAtPrice: compareAt ? parseFloat(compareAt) : undefined,
