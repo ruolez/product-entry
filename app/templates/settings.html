@@ -180,8 +180,47 @@
         border-color: var(--md-outline);
     }
 
+    .shopify-store-card {
+        display: grid;
+        grid-template-columns: 1fr 1.5fr auto auto auto;
+        gap: var(--md-spacing-sm);
+        align-items: center;
+        padding: var(--md-spacing-md);
+        border: 1px solid var(--md-outline-variant);
+        border-radius: var(--md-radius-sm);
+        margin-bottom: var(--md-spacing-sm);
+        transition: box-shadow 0.2s;
+    }
+    .shopify-store-card:hover { box-shadow: var(--md-elevation-1); }
+
+    .watermark-preview {
+        display: flex;
+        align-items: center;
+        gap: var(--md-spacing-sm);
+        margin-top: var(--md-spacing-sm);
+    }
+    .watermark-preview img {
+        width: 48px;
+        height: 48px;
+        object-fit: contain;
+        border: 1px solid var(--md-outline-variant);
+        border-radius: var(--md-radius-sm);
+        background: var(--md-surface-variant);
+    }
+    .watermark-controls {
+        display: flex;
+        gap: var(--md-spacing-sm);
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: var(--md-spacing-sm);
+    }
+    .watermark-controls select, .watermark-controls input[type="range"] {
+        font-size: 0.8125rem;
+    }
+
     @media (max-width: 900px) {
         .store-card { grid-template-columns: 1fr 1fr; }
+        .shopify-store-card { grid-template-columns: 1fr 1fr; }
         .formula-row { grid-template-columns: 1fr 1fr; }
         .field-config-row { grid-template-columns: 1fr 1fr 1fr; }
     }
@@ -255,6 +294,77 @@
         </div>
     </div>
 
+    <!-- ==================== SHOPIFY STORE CONNECTIONS ==================== -->
+    <div class="settings-section">
+        <div class="settings-section-header">
+            <h2>
+                <span class="material-icons-round" style="color:#96bf48;font-size:20px;">shopping_bag</span>
+                Shopify Stores
+            </h2>
+            <button class="btn btn-primary" id="btn-add-shopify-store" style="padding:6px 16px; font-size:0.8125rem;">
+                <span class="material-icons-round" style="font-size:16px;">add</span>
+                Add Shopify Store
+            </button>
+        </div>
+        <div class="settings-section-body">
+            <div id="shopify-stores-list">
+                <p class="text-muted">Loading Shopify stores...</p>
+            </div>
+            <div id="shopify-store-form" class="hidden" style="margin-top:var(--md-spacing-md); padding:var(--md-spacing-md); background:var(--md-surface-variant); border-radius:var(--md-radius-sm);">
+                <h3 style="font-size:0.875rem; font-family:var(--md-font-family); font-weight:500; margin-bottom:var(--md-spacing-md);" id="shopify-store-form-title">Add Shopify Store</h3>
+                <div class="form-row cols-3" style="margin-bottom:var(--md-spacing-md);">
+                    <div class="form-group">
+                        <label>Store Name <span class="required-mark">*</span></label>
+                        <input type="text" class="form-input" id="ssf-name" placeholder="e.g. My Shopify Store">
+                    </div>
+                    <div class="form-group">
+                        <label>Store URL <span class="required-mark">*</span></label>
+                        <input type="text" class="form-input" id="ssf-url" placeholder="my-store.myshopify.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Admin API Access Token <span class="required-mark">*</span></label>
+                        <input type="password" class="form-input" id="ssf-token" placeholder="shpat_xxxxx">
+                    </div>
+                </div>
+                <div id="ssf-watermark-section" class="hidden" style="margin-bottom:var(--md-spacing-md);">
+                    <label style="font-size:0.8125rem; font-weight:500; margin-bottom:var(--md-spacing-xs); display:block;">Watermark</label>
+                    <div class="watermark-controls">
+                        <input type="file" id="ssf-watermark-file" accept="image/png,image/webp" style="font-size:0.8125rem;">
+                        <div class="watermark-preview" id="ssf-watermark-preview"></div>
+                        <div style="display:flex; align-items:center; gap:var(--md-spacing-xs);">
+                            <label class="store-card-label" style="margin:0;">Position</label>
+                            <select class="form-select" id="ssf-watermark-position" style="padding:4px 8px; font-size:0.8125rem;">
+                                <option value="bottom-right">Bottom Right</option>
+                                <option value="bottom-left">Bottom Left</option>
+                                <option value="top-right">Top Right</option>
+                                <option value="top-left">Top Left</option>
+                                <option value="center">Center</option>
+                            </select>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:var(--md-spacing-xs);">
+                            <label class="store-card-label" style="margin:0;">Opacity</label>
+                            <input type="range" id="ssf-watermark-opacity" min="0.1" max="1" step="0.05" value="0.30" style="width:80px;">
+                            <span id="ssf-opacity-label" class="text-sm">30%</span>
+                        </div>
+                        <button class="btn btn-secondary btn-sm" id="btn-remove-watermark" style="padding:4px 10px; font-size:0.75rem;" title="Remove watermark">
+                            <span class="material-icons-round" style="font-size:14px;">delete</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="flex gap-sm">
+                    <button class="btn btn-primary" id="btn-save-shopify-store" style="padding:6px 16px; font-size:0.8125rem;">Save Store</button>
+                    <button class="btn btn-secondary" id="btn-test-shopify-store" style="padding:6px 16px; font-size:0.8125rem;">
+                        <span class="material-icons-round" style="font-size:16px;">cable</span>
+                        Test Connection
+                    </button>
+                    <button class="btn btn-secondary" id="btn-cancel-shopify-store" style="padding:6px 16px; font-size:0.8125rem;">Cancel</button>
+                    <span id="shopify-test-result" class="text-sm" style="margin-left:auto;"></span>
+                </div>
+                <input type="hidden" id="ssf-edit-id" value="">
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== PRICE FORMULAS ==================== -->
     <div class="settings-section">
         <div class="settings-section-header">
@@ -322,15 +432,17 @@ import { api } from "/static/js/api-client.js";
 import { showToast } from "/static/js/utils.js";
 
 let stores = [];
+let shopifyStores = [];
 let formulas = [];
 let fieldConfigs = [];
 let fieldSort = { key: null, dir: "asc" };
 
 // ── Init ──
 document.addEventListener("DOMContentLoaded", async () => {
-    await loadStores();
+    await Promise.all([loadStores(), loadShopifyStores()]);
     await Promise.all([loadFormulas(), loadFieldConfigs()]);
     bindStoreEvents();
+    bindShopifyStoreEvents();
     bindFormulaEvents();
     bindFieldEvents();
 });
@@ -498,6 +610,198 @@ window.togglePrimary = async function(id, setPrimary) {
     } catch (err) {
         showToast(`Error: ${err.message}`, "error");
     }
+};
+
+// ── SHOPIFY STORES ──
+async function loadShopifyStores() {
+    try {
+        shopifyStores = await api.get("/api/settings/shopify-stores");
+        renderShopifyStores();
+    } catch { shopifyStores = []; renderShopifyStores(); }
+}
+
+function renderShopifyStores() {
+    const el = document.getElementById("shopify-stores-list");
+    if (!shopifyStores.length) {
+        el.innerHTML = '<p class="text-muted">No Shopify stores configured yet. Click "Add Shopify Store" to get started.</p>';
+        return;
+    }
+    el.innerHTML = shopifyStores.map(s => `
+        <div class="shopify-store-card" data-id="${s.id}">
+            <div>
+                <div class="store-card-label">Name</div>
+                <strong style="font-size:0.875rem;">${s.name}</strong>
+            </div>
+            <div>
+                <div class="store-card-label">Store URL</div>
+                <span class="text-sm">${s.store_url}</span>
+            </div>
+            <div>
+                <span class="status-badge ${s.is_active ? 'success' : 'error'}">
+                    ${s.is_active ? 'Active' : 'Inactive'}
+                </span>
+            </div>
+            <div>
+                <span class="status-badge ${s.has_watermark ? 'success' : 'pending'}">
+                    ${s.has_watermark ? 'Watermark' : 'No Watermark'}
+                </span>
+            </div>
+            <div class="flex gap-xs">
+                <button class="btn btn-icon btn-secondary" onclick="editShopifyStore(${s.id})" title="Edit">
+                    <span class="material-icons-round" style="font-size:16px;">edit</span>
+                </button>
+                <button class="btn btn-icon btn-secondary" onclick="testShopifyConnection(${s.id}, this)" title="Test Connection">
+                    <span class="material-icons-round" style="font-size:16px;">cable</span>
+                </button>
+            </div>
+        </div>
+    `).join("");
+}
+
+function bindShopifyStoreEvents() {
+    document.getElementById("btn-add-shopify-store").addEventListener("click", () => {
+        document.getElementById("ssf-edit-id").value = "";
+        document.getElementById("shopify-store-form-title").textContent = "Add Shopify Store";
+        ["ssf-name","ssf-url","ssf-token"].forEach(id =>
+            document.getElementById(id).value = "");
+        document.getElementById("ssf-watermark-section").classList.add("hidden");
+        document.getElementById("ssf-watermark-preview").innerHTML = "";
+        document.getElementById("shopify-store-form").classList.remove("hidden");
+        document.getElementById("shopify-test-result").textContent = "";
+    });
+
+    document.getElementById("btn-cancel-shopify-store").addEventListener("click", () => {
+        document.getElementById("shopify-store-form").classList.add("hidden");
+    });
+
+    document.getElementById("ssf-watermark-opacity").addEventListener("input", (e) => {
+        document.getElementById("ssf-opacity-label").textContent = Math.round(e.target.value * 100) + "%";
+    });
+
+    document.getElementById("btn-save-shopify-store").addEventListener("click", async () => {
+        const editId = document.getElementById("ssf-edit-id").value;
+        const data = {
+            name: document.getElementById("ssf-name").value,
+            store_url: document.getElementById("ssf-url").value,
+            access_token: document.getElementById("ssf-token").value,
+            watermark_position: document.getElementById("ssf-watermark-position").value,
+            watermark_opacity: parseFloat(document.getElementById("ssf-watermark-opacity").value),
+        };
+
+        if (!data.name || !data.store_url) {
+            showToast("Fill in store name and URL", "warning");
+            return;
+        }
+
+        try {
+            if (editId) {
+                if (!data.access_token) delete data.access_token;
+                await api.put(`/api/settings/shopify-stores/${editId}`, data);
+                showToast("Shopify store updated", "success");
+
+                const fileInput = document.getElementById("ssf-watermark-file");
+                if (fileInput.files.length > 0) {
+                    const formData = new FormData();
+                    formData.append("watermark", fileInput.files[0]);
+                    await fetch(`/api/settings/shopify-stores/${editId}/watermark`, {
+                        method: "POST",
+                        body: formData,
+                    });
+                }
+            } else {
+                if (!data.access_token) { showToast("Access token required", "warning"); return; }
+                const result = await api.post("/api/settings/shopify-stores", data);
+                showToast("Shopify store created", "success");
+
+                const fileInput = document.getElementById("ssf-watermark-file");
+                if (fileInput.files.length > 0) {
+                    const formData = new FormData();
+                    formData.append("watermark", fileInput.files[0]);
+                    await fetch(`/api/settings/shopify-stores/${result.id}/watermark`, {
+                        method: "POST",
+                        body: formData,
+                    });
+                }
+            }
+            document.getElementById("shopify-store-form").classList.add("hidden");
+            await loadShopifyStores();
+        } catch (err) {
+            showToast(`Error: ${err.message}`, "error");
+        }
+    });
+
+    document.getElementById("btn-test-shopify-store").addEventListener("click", async () => {
+        const editId = document.getElementById("ssf-edit-id").value;
+        const resultEl = document.getElementById("shopify-test-result");
+        if (!editId) {
+            resultEl.innerHTML = '<span class="text-error">Save the store first, then test.</span>';
+            return;
+        }
+        resultEl.innerHTML = '<span class="text-muted">Testing...</span>';
+        try {
+            const r = await api.post(`/api/settings/shopify-stores/${editId}/test`);
+            resultEl.innerHTML = r.success
+                ? `<span class="status-badge success">${r.message}</span>`
+                : `<span class="status-badge error">${r.message}</span>`;
+        } catch (err) {
+            resultEl.innerHTML = `<span class="status-badge error">${err.data?.message || err.message}</span>`;
+        }
+    });
+
+    document.getElementById("btn-remove-watermark").addEventListener("click", async () => {
+        const editId = document.getElementById("ssf-edit-id").value;
+        if (!editId) return;
+        try {
+            await api.delete(`/api/settings/shopify-stores/${editId}/watermark`);
+            document.getElementById("ssf-watermark-preview").innerHTML = "";
+            document.getElementById("ssf-watermark-file").value = "";
+            showToast("Watermark removed", "success");
+        } catch (err) {
+            showToast(`Error: ${err.message}`, "error");
+        }
+    });
+}
+
+window.editShopifyStore = async function(id) {
+    const store = shopifyStores.find(s => s.id === id);
+    if (!store) return;
+    document.getElementById("ssf-edit-id").value = id;
+    document.getElementById("shopify-store-form-title").textContent = `Edit: ${store.name}`;
+    document.getElementById("ssf-name").value = store.name;
+    document.getElementById("ssf-url").value = store.store_url;
+    document.getElementById("ssf-token").value = "";
+    document.getElementById("ssf-watermark-position").value = store.watermark_position || "bottom-right";
+    document.getElementById("ssf-watermark-opacity").value = store.watermark_opacity || 0.30;
+    document.getElementById("ssf-opacity-label").textContent = Math.round((store.watermark_opacity || 0.30) * 100) + "%";
+
+    document.getElementById("ssf-watermark-section").classList.remove("hidden");
+
+    const previewEl = document.getElementById("ssf-watermark-preview");
+    if (store.has_watermark) {
+        try {
+            const r = await api.get(`/api/settings/shopify-stores/${id}/watermark-preview`);
+            previewEl.innerHTML = `<img src="data:image/png;base64,${r.watermark_base64}" alt="Watermark">`;
+        } catch {
+            previewEl.innerHTML = '<span class="text-sm text-muted">Could not load preview</span>';
+        }
+    } else {
+        previewEl.innerHTML = '<span class="text-sm text-muted">No watermark uploaded</span>';
+    }
+
+    document.getElementById("shopify-store-form").classList.remove("hidden");
+    document.getElementById("shopify-test-result").textContent = "";
+};
+
+window.testShopifyConnection = async function(id, btn) {
+    const origHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span>';
+    try {
+        const r = await api.post(`/api/settings/shopify-stores/${id}/test`);
+        showToast(r.success ? r.message : `Failed: ${r.message}`, r.success ? "success" : "error");
+    } catch (err) {
+        showToast(`Error: ${err.data?.message || err.message}`, "error");
+    }
+    btn.innerHTML = origHtml;
 };
 
 // ── PRICE FORMULAS ──

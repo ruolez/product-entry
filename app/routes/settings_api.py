@@ -1,3 +1,5 @@
+import base64
+
 from flask import Blueprint, jsonify, request
 
 from models.settings import db
@@ -7,6 +9,11 @@ from services.store_connection import (
     get_all_stores,
     get_store,
     test_connection,
+)
+from services.shopify_service import (
+    get_all_shopify_stores,
+    get_shopify_store,
+    test_shopify_connection,
 )
 
 settings_bp = Blueprint("settings", __name__)
@@ -196,3 +203,148 @@ def update_field_configs():
         )
     db.session.commit()
     return jsonify({"message": "Field configs updated"})
+
+
+# --- Shopify Store CRUD ---
+
+@settings_bp.route("/shopify-stores")
+def list_shopify_stores():
+    stores = get_all_shopify_stores(active_only=False)
+    for s in stores:
+        s.pop("access_token_enc", None)
+        s["has_watermark"] = s.get("watermark_image") is not None
+        s.pop("watermark_image", None)
+        if s.get("created_at"):
+            s["created_at"] = s["created_at"].isoformat()
+        if s.get("updated_at"):
+            s["updated_at"] = s["updated_at"].isoformat()
+        if s.get("watermark_opacity") is not None:
+            s["watermark_opacity"] = float(s["watermark_opacity"])
+    return jsonify(stores)
+
+
+@settings_bp.route("/shopify-stores", methods=["POST"])
+def create_shopify_store():
+    data = request.get_json()
+    required = ["name", "store_url", "access_token"]
+    for field in required:
+        if not data.get(field):
+            return jsonify({"error": f"{field} is required"}), 400
+
+    token_enc = encrypt_password(data["access_token"])
+    result = db.session.execute(
+        db.text(
+            "INSERT INTO shopify_stores (name, store_url, access_token_enc, is_active, sort_order) "
+            "VALUES (:name, :url, :token, :active, :sort) "
+            "RETURNING id"
+        ),
+        {
+            "name": data["name"],
+            "url": data["store_url"],
+            "token": token_enc,
+            "active": data.get("is_active", True),
+            "sort": data.get("sort_order", 0),
+        },
+    )
+    db.session.commit()
+    new_id = result.scalar()
+    return jsonify({"id": new_id, "message": "Shopify store created"}), 201
+
+
+@settings_bp.route("/shopify-stores/<int:store_id>", methods=["PUT"])
+def update_shopify_store(store_id):
+    data = request.get_json()
+    store = get_shopify_store(store_id)
+    if not store:
+        return jsonify({"error": "Shopify store not found"}), 404
+
+    updates = []
+    params = {"id": store_id}
+
+    for field in ["name", "store_url", "is_active", "sort_order",
+                  "watermark_position", "watermark_opacity"]:
+        if field in data:
+            updates.append(f"{field} = :{field}")
+            params[field] = data[field]
+
+    if "access_token" in data and data["access_token"]:
+        updates.append("access_token_enc = :access_token_enc")
+        params["access_token_enc"] = encrypt_password(data["access_token"])
+
+    if not updates:
+        return jsonify({"error": "No fields to update"}), 400
+
+    updates.append("updated_at = NOW()")
+    sql = f"UPDATE shopify_stores SET {', '.join(updates)} WHERE id = :id"
+    db.session.execute(db.text(sql), params)
+    db.session.commit()
+    return jsonify({"message": "Shopify store updated"})
+
+
+@settings_bp.route("/shopify-stores/<int:store_id>", methods=["DELETE"])
+def delete_shopify_store(store_id):
+    db.session.execute(
+        db.text("UPDATE shopify_stores SET is_active = FALSE, updated_at = NOW() WHERE id = :id"),
+        {"id": store_id},
+    )
+    db.session.commit()
+    return jsonify({"message": "Shopify store deactivated"})
+
+
+@settings_bp.route("/shopify-stores/<int:store_id>/test", methods=["POST"])
+def test_shopify_store_connection(store_id):
+    try:
+        success, message = test_shopify_connection(store_id)
+        return jsonify({"success": success, "message": message}), 200
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 200
+
+
+@settings_bp.route("/shopify-stores/<int:store_id>/watermark", methods=["POST"])
+def upload_shopify_watermark(store_id):
+    store = get_shopify_store(store_id)
+    if not store:
+        return jsonify({"error": "Shopify store not found"}), 404
+
+    if "watermark" not in request.files:
+        data = request.get_json(silent=True)
+        if data and data.get("watermark_base64"):
+            image_bytes = base64.b64decode(data["watermark_base64"])
+        else:
+            return jsonify({"error": "No watermark file provided"}), 400
+    else:
+        image_bytes = request.files["watermark"].read()
+
+    if len(image_bytes) > 500_000:
+        return jsonify({"error": "Watermark image must be under 500KB"}), 400
+
+    db.session.execute(
+        db.text(
+            "UPDATE shopify_stores SET watermark_image = :img, updated_at = NOW() WHERE id = :id"
+        ),
+        {"img": image_bytes, "id": store_id},
+    )
+    db.session.commit()
+    return jsonify({"message": "Watermark uploaded"})
+
+
+@settings_bp.route("/shopify-stores/<int:store_id>/watermark", methods=["DELETE"])
+def delete_shopify_watermark(store_id):
+    db.session.execute(
+        db.text(
+            "UPDATE shopify_stores SET watermark_image = NULL, updated_at = NOW() WHERE id = :id"
+        ),
+        {"id": store_id},
+    )
+    db.session.commit()
+    return jsonify({"message": "Watermark removed"})
+
+
+@settings_bp.route("/shopify-stores/<int:store_id>/watermark-preview")
+def get_shopify_watermark_preview(store_id):
+    store = get_shopify_store(store_id)
+    if not store or not store.get("watermark_image"):
+        return jsonify({"error": "No watermark found"}), 404
+
+    img_b64 = base64.b64encode(store["watermark_image"]).decode()
+    return jsonify({"watermark_base64": img_b64})

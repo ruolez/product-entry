@@ -1321,3 +1321,19 @@ window.toggleSubsection = function (name) {
         content.classList.toggle("collapsed");
     }
 };
+
+// ── Entry Mode Tabs (Back Office / Shopify) ────────────
+document.querySelectorAll(".entry-mode-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+        document.querySelectorAll(".entry-mode-tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        const mode = tab.dataset.mode;
+        document.getElementById("backoffice-content").classList.toggle("hidden", mode !== "backoffice");
+        document.getElementById("shopify-content").classList.toggle("hidden", mode !== "shopify");
+    });
+});
+
+window.toggleShopifySection = function (sectionId) {
+    const section = document.getElementById(sectionId);
+    if (section) section.classList.toggle("collapsed");
+};

@@ -330,11 +330,379 @@
         font-family: monospace;
         margin-left: var(--md-spacing-sm);
     }
+
+    /* ── Entry mode tabs (Back Office | Shopify) ── */
+    .entry-mode-tabs {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid var(--md-outline-variant);
+        margin-bottom: var(--md-spacing-lg);
+    }
+    .entry-mode-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--md-spacing-xs);
+        padding: 10px 24px;
+        font-family: var(--md-font-family);
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--md-on-surface-variant);
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -2px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .entry-mode-tab:hover {
+        color: var(--md-primary);
+        background: var(--md-primary-light);
+    }
+    .entry-mode-tab.active {
+        color: var(--md-primary);
+        border-bottom-color: var(--md-primary);
+    }
+    .entry-mode-tab .material-icons-round { font-size: 18px; }
+
+    /* ── Shopify form layout ── */
+    .shopify-layout {
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        gap: var(--md-spacing-lg);
+        align-items: start;
+    }
+    @media (max-width: 900px) {
+        .shopify-layout { grid-template-columns: 1fr; }
+    }
+    .shopify-sidebar {
+        position: sticky;
+        top: 80px;
+    }
+    .shopify-section {
+        background: var(--md-surface);
+        border: 1px solid var(--md-outline);
+        border-radius: var(--md-radius-md);
+        margin-bottom: var(--md-spacing-md);
+        overflow: hidden;
+    }
+    .shopify-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--md-spacing-sm) var(--md-spacing-md);
+        font-family: var(--md-font-family);
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        user-select: none;
+    }
+    .shopify-section-header:hover { background: var(--md-surface-variant); }
+    .shopify-section-body {
+        padding: 0 var(--md-spacing-md) var(--md-spacing-md);
+    }
+    .shopify-section.collapsed .shopify-section-body { display: none; }
+    .shopify-section.collapsed .shopify-section-header .expand-icon { transform: rotate(-90deg); }
+
+    /* Shopify media upload */
+    .media-upload-zone {
+        border: 2px dashed var(--md-outline);
+        border-radius: var(--md-radius-sm);
+        padding: var(--md-spacing-xl);
+        text-align: center;
+        color: var(--md-on-surface-variant);
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+    .media-upload-zone:hover,
+    .media-upload-zone.drag-over {
+        border-color: var(--md-primary);
+        background: var(--md-primary-light);
+    }
+    .media-upload-zone .upload-label {
+        font-size: 0.875rem;
+        font-family: var(--md-font-family);
+    }
+    .media-thumbnails {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: var(--md-spacing-sm);
+        margin-top: var(--md-spacing-sm);
+    }
+    .media-thumb {
+        position: relative;
+        aspect-ratio: 1;
+        border-radius: var(--md-radius-sm);
+        overflow: hidden;
+        border: 1px solid var(--md-outline-variant);
+    }
+    .media-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .media-thumb .thumb-remove {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        background: rgba(0,0,0,0.6);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 22px;
+        height: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 14px;
+    }
+    .media-thumb.primary::after {
+        content: "★";
+        position: absolute;
+        bottom: 4px;
+        left: 4px;
+        background: var(--md-primary);
+        color: white;
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 0.65rem;
+    }
+
+    /* Image mode toggle */
+    .image-mode-toggle {
+        display: inline-flex;
+        border: 1px solid var(--md-outline);
+        border-radius: var(--md-radius-sm);
+        overflow: hidden;
+        margin-bottom: var(--md-spacing-sm);
+    }
+    .image-mode-btn {
+        padding: 6px 14px;
+        font-size: 0.75rem;
+        font-family: var(--md-font-family);
+        font-weight: 500;
+        border: none;
+        background: var(--md-surface);
+        color: var(--md-on-surface-variant);
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .image-mode-btn.active {
+        background: var(--md-primary);
+        color: white;
+    }
+
+    /* Variant builder */
+    .variant-option-card {
+        background: var(--md-surface-variant);
+        border-radius: var(--md-radius-sm);
+        padding: var(--md-spacing-md);
+        margin-bottom: var(--md-spacing-sm);
+    }
+    .variant-option-card .option-header {
+        display: flex;
+        align-items: center;
+        gap: var(--md-spacing-sm);
+        margin-bottom: var(--md-spacing-sm);
+    }
+    .option-values-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--md-spacing-xs);
+        padding: 6px;
+        border: 1px solid var(--md-outline);
+        border-radius: var(--md-radius-sm);
+        background: var(--md-surface);
+        min-height: 36px;
+        cursor: text;
+    }
+    .option-value-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 8px;
+        background: var(--md-primary-light);
+        color: var(--md-primary);
+        border-radius: var(--md-radius-xl);
+        font-size: 0.8125rem;
+        font-family: var(--md-font-family);
+    }
+    .option-value-chip .remove-value {
+        cursor: pointer;
+        font-size: 14px;
+        opacity: 0.6;
+    }
+    .option-value-chip .remove-value:hover { opacity: 1; }
+    .option-value-input {
+        border: none;
+        outline: none;
+        font-size: 0.8125rem;
+        font-family: var(--md-font-family);
+        flex: 1;
+        min-width: 80px;
+        background: transparent;
+    }
+
+    /* Variant table */
+    .variant-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8125rem;
+        margin-top: var(--md-spacing-sm);
+    }
+    .variant-table th {
+        text-align: left;
+        font-family: var(--md-font-family);
+        font-size: 0.7rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--md-on-surface-variant);
+        padding: 6px 8px;
+        border-bottom: 2px solid var(--md-outline);
+    }
+    .variant-table td {
+        padding: 4px 8px;
+        border-bottom: 1px solid var(--md-outline-variant);
+    }
+    .variant-table td input {
+        width: 100%;
+        padding: 4px 6px;
+        font-size: 0.8125rem;
+        border: 1px solid var(--md-outline-variant);
+        border-radius: var(--md-radius-xs);
+    }
+    .variant-table td input:focus {
+        border-color: var(--md-primary);
+        outline: none;
+    }
+
+    /* Tag input */
+    .tag-input-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--md-spacing-xs);
+        padding: 6px;
+        border: 1px solid var(--md-outline);
+        border-radius: var(--md-radius-sm);
+        background: var(--md-surface);
+        min-height: 36px;
+        cursor: text;
+    }
+    .tag-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        background: var(--md-surface-variant);
+        border-radius: var(--md-radius-xl);
+        font-size: 0.8125rem;
+    }
+    .tag-chip .remove-tag {
+        cursor: pointer;
+        font-size: 14px;
+        color: var(--md-on-surface-variant);
+    }
+    .tag-chip .remove-tag:hover { color: var(--md-error); }
+    .tag-input {
+        border: none;
+        outline: none;
+        font-size: 0.8125rem;
+        flex: 1;
+        min-width: 80px;
+        background: transparent;
+    }
+
+    /* Metafield rows */
+    .metafield-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr 140px 1fr auto;
+        gap: var(--md-spacing-sm);
+        align-items: center;
+        padding: var(--md-spacing-xs) 0;
+        border-bottom: 1px solid var(--md-outline-variant);
+    }
+    .metafield-row .form-input, .metafield-row .form-select {
+        padding: 6px 8px;
+        font-size: 0.8125rem;
+    }
+
+    /* Watermark preview cards */
+    .watermark-previews {
+        display: flex;
+        gap: var(--md-spacing-sm);
+        flex-wrap: wrap;
+        margin-top: var(--md-spacing-sm);
+    }
+    .watermark-card {
+        text-align: center;
+        width: 120px;
+    }
+    .watermark-card canvas {
+        width: 120px;
+        height: 120px;
+        border: 1px solid var(--md-outline-variant);
+        border-radius: var(--md-radius-sm);
+    }
+    .watermark-card .store-label {
+        font-size: 0.7rem;
+        color: var(--md-on-surface-variant);
+        margin-top: 4px;
+    }
+
+    /* SEO preview */
+    .seo-preview {
+        background: var(--md-surface-variant);
+        border-radius: var(--md-radius-sm);
+        padding: var(--md-spacing-md);
+        margin-top: var(--md-spacing-sm);
+    }
+    .seo-preview-title {
+        color: #1a0dab;
+        font-size: 1.1rem;
+        font-weight: 400;
+        margin-bottom: 2px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .seo-preview-url {
+        color: #006621;
+        font-size: 0.8125rem;
+        margin-bottom: 2px;
+    }
+    .seo-preview-desc {
+        color: #545454;
+        font-size: 0.8125rem;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .hidden { display: none !important; }
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css">
+
 {% endblock %}
 
 {% block content %}
 <div class="entry-page">
+
+    <!-- Entry Mode Tabs -->
+    <div class="entry-mode-tabs" id="entry-mode-tabs">
+        <button class="entry-mode-tab active" data-mode="backoffice">
+            <span class="material-icons-round">dns</span> Back Office
+        </button>
+        <button class="entry-mode-tab" data-mode="shopify">
+            <span class="material-icons-round">shopping_bag</span> Shopify
+        </button>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- BACK OFFICE CONTENT                                          -->
+    <!-- ============================================================ -->
+    <div id="backoffice-content">
 
     <!-- Store Selector -->
     <div class="store-selector" id="store-selector">
@@ -696,9 +1064,354 @@
             <span class="shortcut-hint">Ctrl+S</span>
         </button>
     </div>
+
+    </div><!-- /backoffice-content -->
+
+    <!-- ============================================================ -->
+    <!-- SHOPIFY CONTENT                                              -->
+    <!-- ============================================================ -->
+    <div id="shopify-content" class="hidden">
+
+        <!-- Shopify Store Selector -->
+        <div class="store-selector" id="shopify-store-selector">
+            <span class="store-selector-label">
+                <span class="material-icons-round" style="font-size:18px; vertical-align:middle; margin-right:4px;">shopping_bag</span>
+                Shopify Stores
+            </span>
+            <span class="text-muted">Loading Shopify stores...</span>
+        </div>
+
+        <div class="shopify-layout">
+            <!-- ── LEFT COLUMN (Main form) ── -->
+            <div class="shopify-main">
+
+                <!-- Title & Description -->
+                <div class="shopify-section" id="sp-section-title">
+                    <div class="shopify-section-body" style="padding-top:var(--md-spacing-md);">
+                        <div class="form-group" style="margin-bottom:var(--md-spacing-md);">
+                            <label>Title <span class="required-mark">*</span></label>
+                            <input type="text" class="form-input" id="sp-title" placeholder="Short sleeve t-shirt">
+                            <div class="field-error" id="sp-error-title"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>Description</label>
+                            <div id="sp-description-editor" style="min-height:160px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Media -->
+                <div class="shopify-section" id="sp-section-media">
+                    <div class="shopify-section-header" onclick="toggleShopifySection('sp-section-media')">
+                        <span>Media</span>
+                        <span class="material-icons-round expand-icon" style="font-size:18px;">expand_more</span>
+                    </div>
+                    <div class="shopify-section-body">
+                        <div class="image-mode-toggle">
+                            <button class="image-mode-btn active" data-mode="shared">Shared Images</button>
+                            <button class="image-mode-btn" data-mode="per_store">Per-Store Images</button>
+                        </div>
+                        <div id="sp-media-shared">
+                            <div class="media-upload-zone" id="sp-upload-zone">
+                                <span class="material-icons-round" style="font-size:36px; margin-bottom:8px; display:block;">cloud_upload</span>
+                                <span class="upload-label">Upload new</span> &nbsp; <span class="upload-label" style="color:var(--md-primary); cursor:pointer;">Select existing</span>
+                                <br><span class="text-sm text-muted">Accepts images, videos, or 3D models</span>
+                                <input type="file" id="sp-file-input" multiple accept="image/*,video/*" style="display:none;">
+                            </div>
+                            <div class="media-thumbnails" id="sp-thumbnails"></div>
+                            <div class="watermark-previews" id="sp-watermark-previews"></div>
+                        </div>
+                        <div id="sp-media-perstore" class="hidden">
+                            <div class="store-tabs" id="sp-media-store-tabs"></div>
+                            <div id="sp-perstore-upload-areas"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Category -->
+                <div class="shopify-section" id="sp-section-category">
+                    <div class="shopify-section-header" onclick="toggleShopifySection('sp-section-category')">
+                        <span>Category</span>
+                        <span class="material-icons-round expand-icon" style="font-size:18px;">expand_more</span>
+                    </div>
+                    <div class="shopify-section-body">
+                        <div class="form-group">
+                            <select class="form-select" id="sp-category">
+                                <option value="">Choose a product category</option>
+                            </select>
+                            <span class="text-sm text-muted">Determines tax rates and adds metafields to improve search, filters, and cross-channel sales</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pricing -->
+                <div class="shopify-section" id="sp-section-pricing">
+                    <div class="shopify-section-header" onclick="toggleShopifySection('sp-section-pricing')">
+                        <span>Pricing</span>
+                        <span class="material-icons-round expand-icon" style="font-size:18px;">expand_more</span>
+                    </div>
+                    <div class="shopify-section-body">
+                        <div class="flex-row">
+                            <div class="form-group">
+                                <label>Price <span class="required-mark">*</span></label>
+                                <div class="money-input-wrapper">
+                                    <span class="currency-symbol">$</span>
+                                    <input type="number" step="0.01" min="0" class="form-input" id="sp-price" placeholder="0.00">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Compare-at price</label>
+                                <div class="money-input-wrapper">
+                                    <span class="currency-symbol">$</span>
+                                    <input type="number" step="0.01" min="0" class="form-input" id="sp-compare-at-price" placeholder="0.00">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Cost per item</label>
+                                <div class="money-input-wrapper">
+                                    <span class="currency-symbol">$</span>
+                                    <input type="number" step="0.01" min="0" class="form-input" id="sp-cost" placeholder="0.00">
+                                </div>
+                            </div>
+                        </div>
+                        <label class="form-checkbox">
+                            <input type="checkbox" id="sp-charge-tax" checked>
+                            Charge tax on this product
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Inventory -->
+                <div class="shopify-section collapsed" id="sp-section-inventory">
+                    <div class="shopify-section-header" onclick="toggleShopifySection('sp-section-inventory')">
+                        <span>Inventory</span>
+                        <div style="display:flex; align-items:center; gap:var(--md-spacing-sm);">
+                            <label class="form-checkbox" style="font-size:0.8125rem; margin:0;" onclick="event.stopPropagation();">
+                                <input type="checkbox" id="sp-track-inventory" checked>
+                                Inventory tracked
+                            </label>
+                            <span class="material-icons-round expand-icon" style="font-size:18px;">expand_more</span>
+                        </div>
+                    </div>
+                    <div class="shopify-section-body">
+                        <div id="sp-inventory-locations">
+                            <p class="text-muted text-sm">Select a store to load locations</p>
+                        </div>
+                        <div style="margin-top:var(--md-spacing-md); padding-top:var(--md-spacing-md); border-top:1px solid var(--md-outline-variant);">
+                            <div class="flex-row">
+                                <div class="form-group">
+                                    <label>SKU (Stock Keeping Unit)</label>
+                                    <input type="text" class="form-input" id="sp-sku" placeholder="">
+                                </div>
+                                <div class="form-group">
+                                    <label>Barcode (ISBN, UPC, GTIN, etc.)</label>
+                                    <input type="text" class="form-input" id="sp-barcode" placeholder="">
+                                </div>
+                            </div>
+                            <label class="form-checkbox">
+                                <input type="checkbox" id="sp-continue-selling">
+                                Continue selling when out of stock
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Shipping -->
+                <div class="shopify-section collapsed" id="sp-section-shipping">
+                    <div class="shopify-section-header" onclick="toggleShopifySection('sp-section-shipping')">
+                        <span>Shipping</span>
+                        <div style="display:flex; align-items:center; gap:var(--md-spacing-sm);">
+                            <label class="form-checkbox" style="font-size:0.8125rem; margin:0;" onclick="event.stopPropagation();">
+                                <input type="checkbox" id="sp-physical-product" checked>
+                                Physical product
+                            </label>
+                            <span class="material-icons-round expand-icon" style="font-size:18px;">expand_more</span>
+                        </div>
+                    </div>
+                    <div class="shopify-section-body">
+                        <div class="flex-row">
+                            <div class="form-group" style="flex:2;">
+                                <label>Product weight</label>
+                                <div style="display:flex; gap:var(--md-spacing-sm);">
+                                    <input type="number" step="0.1" min="0" class="form-input" id="sp-weight" placeholder="0.0" style="flex:1;">
+                                    <select class="form-select" id="sp-weight-unit" style="flex:0 0 70px;">
+                                        <option value="lb" selected>lb</option>
+                                        <option value="kg">kg</option>
+                                        <option value="oz">oz</option>
+                                        <option value="g">g</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex-row">
+                            <div class="form-group">
+                                <label>Country of origin</label>
+                                <input type="text" class="form-input" id="sp-country-origin" placeholder="e.g. United States">
+                            </div>
+                            <div class="form-group">
+                                <label>HS (Harmonized System) code</label>
+                                <input type="text" class="form-input" id="sp-hs-code" placeholder="">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Variants -->
+                <div class="shopify-section" id="sp-section-variants">
+                    <div class="shopify-section-header" onclick="toggleShopifySection('sp-section-variants')">
+                        <span>Variants</span>
+                        <span class="material-icons-round expand-icon" style="font-size:18px;">expand_more</span>
+                    </div>
+                    <div class="shopify-section-body">
+                        <div id="sp-variant-options"></div>
+                        <button class="btn btn-secondary" id="sp-add-option" style="padding:6px 14px; font-size:0.8125rem;">
+                            <span class="material-icons-round" style="font-size:16px;">add</span>
+                            Add options like size or color
+                        </button>
+                        <div id="sp-variant-table-container" class="hidden"></div>
+                    </div>
+                </div>
+
+                <!-- Metafields -->
+                <div class="shopify-section collapsed" id="sp-section-metafields">
+                    <div class="shopify-section-header" onclick="toggleShopifySection('sp-section-metafields')">
+                        <span>Metafields</span>
+                        <span class="material-icons-round expand-icon" style="font-size:18px;">expand_more</span>
+                    </div>
+                    <div class="shopify-section-body">
+                        <div id="sp-metafields-list"></div>
+                        <button class="btn btn-secondary" id="sp-add-metafield" style="padding:6px 14px; font-size:0.8125rem; margin-top:var(--md-spacing-sm);">
+                            <span class="material-icons-round" style="font-size:16px;">add</span>
+                            Add metafield
+                        </button>
+                    </div>
+                </div>
+
+                <!-- SEO -->
+                <div class="shopify-section collapsed" id="sp-section-seo">
+                    <div class="shopify-section-header" onclick="toggleShopifySection('sp-section-seo')">
+                        <span>Search engine listing</span>
+                        <span class="material-icons-round expand-icon" style="font-size:18px;">expand_more</span>
+                    </div>
+                    <div class="shopify-section-body">
+                        <div class="seo-preview" id="sp-seo-preview">
+                            <div class="seo-preview-title" id="sp-seo-preview-title">Page title</div>
+                            <div class="seo-preview-url" id="sp-seo-preview-url">https://store.myshopify.com/products/</div>
+                            <div class="seo-preview-desc" id="sp-seo-preview-desc">Add a description to see a preview</div>
+                        </div>
+                        <div class="form-group" style="margin-top:var(--md-spacing-md);">
+                            <label>Page title</label>
+                            <input type="text" class="form-input" id="sp-seo-title" placeholder="">
+                        </div>
+                        <div class="form-group">
+                            <label>Meta description</label>
+                            <textarea class="form-textarea" id="sp-seo-description" rows="3" placeholder=""></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>URL handle</label>
+                            <input type="text" class="form-input" id="sp-seo-handle" placeholder="">
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ── RIGHT COLUMN (Sidebar) ── -->
+            <div class="shopify-sidebar">
+
+                <!-- Status -->
+                <div class="shopify-section">
+                    <div class="shopify-section-body" style="padding-top:var(--md-spacing-md);">
+                        <div class="form-group">
+                            <label>Status</label>
+                            <select class="form-select" id="sp-status">
+                                <option value="ACTIVE">Active</option>
+                                <option value="DRAFT" selected>Draft</option>
+                                <option value="ARCHIVED">Archived</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Publishing -->
+                <div class="shopify-section">
+                    <div class="shopify-section-header" onclick="toggleShopifySection('sp-section-publishing')">
+                        <span>Publishing</span>
+                        <span class="material-icons-round expand-icon" style="font-size:18px;">expand_more</span>
+                    </div>
+                    <div class="shopify-section-body" id="sp-section-publishing">
+                        <div id="sp-publications">
+                            <p class="text-sm text-muted">Select a store to load sales channels</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Product Organization -->
+                <div class="shopify-section">
+                    <div class="shopify-section-header" onclick="toggleShopifySection('sp-section-org')">
+                        <span>Product organization</span>
+                        <span class="material-icons-round expand-icon" style="font-size:18px;">expand_more</span>
+                    </div>
+                    <div class="shopify-section-body" id="sp-section-org">
+                        <div class="form-group" style="margin-bottom:var(--md-spacing-sm);">
+                            <label>Type</label>
+                            <input type="text" class="form-input" id="sp-product-type" placeholder="">
+                        </div>
+                        <div class="form-group" style="margin-bottom:var(--md-spacing-sm);">
+                            <label>Vendor</label>
+                            <input type="text" class="form-input" id="sp-vendor" placeholder="">
+                        </div>
+                        <div class="form-group" style="margin-bottom:var(--md-spacing-sm);">
+                            <label>Collections</label>
+                            <div class="tag-input-container" id="sp-collections-input">
+                                <input type="text" class="tag-input" id="sp-collections-search" placeholder="Search collections...">
+                            </div>
+                            <div class="autocomplete-dropdown hidden" id="sp-collections-dropdown"></div>
+                        </div>
+                        <div class="form-group">
+                            <label>Tags</label>
+                            <div class="tag-input-container" id="sp-tags-container">
+                                <input type="text" class="tag-input" id="sp-tags-input" placeholder="Add tags...">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Theme template -->
+                <div class="shopify-section">
+                    <div class="shopify-section-body" style="padding-top:var(--md-spacing-md);">
+                        <div class="form-group">
+                            <label>Theme template</label>
+                            <select class="form-select" id="sp-template">
+                                <option value="">Default product</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Shopify Action Bar -->
+        <div class="action-bar" id="shopify-action-bar">
+            <div style="margin-right: auto; display: flex; align-items: center; gap: var(--md-spacing-sm);">
+                <span class="text-sm text-muted" id="sp-store-count-label">No stores selected</span>
+            </div>
+            <button class="btn btn-secondary" id="sp-btn-clear" title="Clear all form fields">
+                <span class="material-icons-round">clear_all</span> Clear
+            </button>
+            <button class="btn btn-primary" id="sp-btn-save" disabled title="Save to selected Shopify stores">
+                <span class="material-icons-round">save</span> Save to Stores
+            </button>
+        </div>
+
+    </div><!-- /shopify-content -->
+
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/quill@2/dist/quill.js"></script>
 <script type="module" src="/static/js/app.js"></script>
+<script type="module" src="/static/js/shopify.js"></script>
 {% endblock %}
