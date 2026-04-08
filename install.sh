@@ -24,8 +24,25 @@ WT_HEIGHT=20
 WT_WIDTH=70
 WT_MENU_HEIGHT=10
 
-# Blue background, default dialog colors (guaranteed readable text)
-export NEWT_COLORS='root=,blue roottext=white,blue'
+# Full color scheme: red title/border, white text, blue background
+export NEWT_COLORS='
+root=,blue
+roottext=white,blue
+window=white,red
+border=white,red
+title=white,red
+textbox=black,white
+actbutton=white,red
+button=black,white
+compactbutton=black,white
+checkbox=black,white
+actcheckbox=white,red
+listbox=black,white
+actlistbox=white,red
+actsellistbox=white,red
+entry=black,white
+label=white,red
+'
 
 # ── Root check ──────────────────────────────────────────
 if [ "$EUID" -ne 0 ]; then
@@ -493,7 +510,7 @@ Proceed with installation?" \
         gauge_msg 100 "Installation complete!" "All services running at http://${server_ip}"
         sleep 1
 
-    } | whiptail --gauge "Preparing..." 8 $WT_WIDTH 0 --title "Installing ${APP_TITLE}"
+    } | whiptail --gauge "Preparing..." 12 $WT_WIDTH 0 --title "Installing ${APP_TITLE}"
 
     # ── Result ────────────────────────────────────────
     if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
@@ -714,7 +731,7 @@ Proceed?" \
         gauge_msg 100 "Update complete!" "All services running at http://${server_ip}"
         sleep 1
 
-    } | whiptail --gauge "Preparing..." 8 $WT_WIDTH 0 --title "Updating ${APP_TITLE}"
+    } | whiptail --gauge "Preparing..." 12 $WT_WIDTH 0 --title "Updating ${APP_TITLE}"
 
     # Verify data
     local store_count formula_count
@@ -820,7 +837,7 @@ do_remove() {
         echo "XXX"
         sleep 1
 
-    } | whiptail --gauge "Removing ${APP_TITLE}..." 8 $WT_WIDTH 0 --title "Removing"
+    } | whiptail --gauge "Removing ${APP_TITLE}..." 12 $WT_WIDTH 0 --title "Removing"
 
     local data_msg="Database data has been PRESERVED in Docker volume.\nReinstall to reconnect to your existing data."
     if [ "$remove_data" = true ]; then
