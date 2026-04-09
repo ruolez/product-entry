@@ -42,19 +42,19 @@
 }
 
 .store-chip.selected {
-    background: var(--md-primary-light);
-    border-color: var(--md-primary);
-    color: var(--md-primary);
+    background: #e6f4ea;
+    border-color: #1e8e3e;
+    color: #1e8e3e;
 }
 
 .store-chip.active-tab {
-    background: var(--md-primary);
-    color: var(--md-on-primary);
-    border-color: var(--md-primary);
+    background: #1e8e3e;
+    color: #fff;
+    border-color: #1e8e3e;
 }
 
 .store-chip.active-tab:hover {
-    background: var(--md-primary-hover);
+    background: #188038;
 }
 
 .store-chip .chip-check {
