@@ -1334,6 +1334,7 @@ document.querySelectorAll(".entry-mode-tab").forEach(tab => {
 });
 
 window.toggleShopifySection = function (sectionId) {
-    const section = document.getElementById(sectionId);
+    const body = document.getElementById(sectionId);
+    const section = body?.closest(".shopify-section");
     if (section) section.classList.toggle("collapsed");
 };
