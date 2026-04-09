@@ -373,16 +373,27 @@ function buildProductDataFromSnapshot(snap, storeId) {
             }
             return { name: o.name, values: allValues.map(v => ({ name: v })) };
         });
-        product.variants = [{
-            optionValues: nv.optionValues.filter(ov => ov.name),
-            price: parseFloat(nv.price) || 0,
-            compareAtPrice: nv.compareAtPrice ? parseFloat(nv.compareAtPrice) : undefined,
-            inventoryItem: { tracked: trackInventory, cost: nv.cost ? parseFloat(nv.cost) : undefined },
-            inventoryPolicy,
-            sku: nv.sku || undefined,
-            barcode: nv.barcode || undefined,
-            taxable,
-        }];
+        // Include existing variants (with IDs) so productSet doesn't remove them
+        const existingVariantEntries = (snap.existingVariants || state.existingVariants || []).map(ev => ({
+            id: ev.id,
+            optionValues: (ev.selectedOptions || []).map(so => ({
+                optionName: so.name,
+                name: so.value,
+            })),
+        }));
+        product.variants = [
+            ...existingVariantEntries,
+            {
+                optionValues: nv.optionValues.filter(ov => ov.name),
+                price: parseFloat(nv.price) || 0,
+                compareAtPrice: nv.compareAtPrice ? parseFloat(nv.compareAtPrice) : undefined,
+                inventoryItem: { tracked: trackInventory, cost: nv.cost ? parseFloat(nv.cost) : undefined },
+                inventoryPolicy,
+                sku: nv.sku || undefined,
+                barcode: nv.barcode || undefined,
+                taxable,
+            }
+        ];
 
         const result = { product };
 
