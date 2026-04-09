@@ -1473,20 +1473,114 @@ function fillTestData() {
 
 // ── Product Lookup ────────────────────────────────────
 function initLookup() {
-    const btn = document.getElementById("sp-lookup-btn");
-    const input = document.getElementById("sp-lookup-barcode");
-    const clearBtn = document.getElementById("sp-clear-template");
+    // Barcode search (button-based)
+    const barcodeBtn = document.getElementById("sp-lookup-btn");
+    const barcodeInput = document.getElementById("sp-lookup-barcode");
+    if (barcodeBtn) barcodeBtn.addEventListener("click", lookupByBarcode);
+    if (barcodeInput) {
+        barcodeInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); lookupByBarcode(); }
+        });
+    }
 
-    if (btn) btn.addEventListener("click", lookupByBarcode);
-    if (input) {
-        input.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") {
+    // Title search (autocomplete)
+    const titleInput = document.getElementById("sp-lookup-title");
+    const dropdown = document.getElementById("sp-lookup-dropdown");
+    let activeIndex = -1;
+
+    if (titleInput && dropdown) {
+        titleInput.addEventListener("input", debounce(async () => {
+            const query = titleInput.value.trim();
+            if (query.length < 2) { dropdown.classList.add("hidden"); return; }
+
+            try {
+                const results = await api.get(`/api/shopify/products/search?q=${encodeURIComponent(query)}`);
+                if (!results.length) {
+                    dropdown.innerHTML = '<div class="autocomplete-item" style="color:var(--md-on-surface-variant);pointer-events:none;">No products found</div>';
+                    dropdown.classList.remove("hidden");
+                    return;
+                }
+
+                activeIndex = -1;
+                dropdown.innerHTML = results.map((p, i) => `
+                    <div class="autocomplete-item" data-index="${i}" data-store-id="${p.store_id}" data-product-id="${p.product_id}">
+                        <span class="ac-subcat">${spHighlightMatch(escapeHtml(p.title), query)}</span>
+                        <span class="ac-cat">
+                            ${p.barcode ? escapeHtml(p.barcode) + " &bull; " : ""}${p.vendor ? escapeHtml(p.vendor) + " &bull; " : ""}$${parseFloat(p.price || 0).toFixed(2)}
+                            <span style="float:right;opacity:0.7;">${escapeHtml(p.store_name)}</span>
+                        </span>
+                    </div>
+                `).join("");
+                dropdown.classList.remove("hidden");
+
+                dropdown.querySelectorAll(".autocomplete-item[data-product-id]").forEach(item => {
+                    item.addEventListener("click", () => {
+                        selectLookupProduct(parseInt(item.dataset.storeId), item.dataset.productId);
+                    });
+                });
+            } catch {
+                dropdown.classList.add("hidden");
+            }
+        }, 300));
+
+        titleInput.addEventListener("keydown", (e) => {
+            const items = dropdown.querySelectorAll(".autocomplete-item[data-product-id]");
+            if (!items.length || dropdown.classList.contains("hidden")) return;
+
+            if (e.key === "ArrowDown") {
                 e.preventDefault();
-                lookupByBarcode();
+                activeIndex = Math.min(activeIndex + 1, items.length - 1);
+                spUpdateActiveItem(items, activeIndex);
+            } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                activeIndex = Math.max(activeIndex - 1, 0);
+                spUpdateActiveItem(items, activeIndex);
+            } else if (e.key === "Enter") {
+                e.preventDefault();
+                if (activeIndex >= 0 && items[activeIndex]) {
+                    selectLookupProduct(
+                        parseInt(items[activeIndex].dataset.storeId),
+                        items[activeIndex].dataset.productId,
+                    );
+                }
+            } else if (e.key === "Escape") {
+                dropdown.classList.add("hidden");
+            }
+        });
+
+        document.addEventListener("click", (e) => {
+            if (!e.target.closest("#sp-lookup-title") && !e.target.closest("#sp-lookup-dropdown")) {
+                dropdown.classList.add("hidden");
             }
         });
     }
-    if (clearBtn) clearBtn.addEventListener("click", clearLookupTemplate);
+
+    // Clear template
+    document.getElementById("sp-clear-template")?.addEventListener("click", clearLookupTemplate);
+}
+
+function spHighlightMatch(text, query) {
+    if (!query) return text;
+    const idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1) return text;
+    return text.slice(0, idx) + "<mark>" + text.slice(idx, idx + query.length) + "</mark>" + text.slice(idx + query.length);
+}
+
+function spUpdateActiveItem(items, index) {
+    items.forEach((item, i) => item.classList.toggle("active", i === index));
+    if (items[index]) items[index].scrollIntoView({ block: "nearest" });
+}
+
+async function selectLookupProduct(storeId, productId) {
+    document.getElementById("sp-lookup-dropdown").classList.add("hidden");
+    document.getElementById("sp-lookup-title").value = "";
+
+    try {
+        const product = await api.get(`/api/shopify/products/detail/${storeId}/${encodeURIComponent(productId)}`);
+        applyLookupData(product, null);
+    } catch (err) {
+        showToast(`Failed to load product details: ${err.message}`, "error");
+    }
 }
 
 async function lookupByBarcode() {
@@ -1502,7 +1596,7 @@ async function lookupByBarcode() {
 
     const origHtml = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span> Searching...';
+    btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span>';
 
     try {
         const result = await api.post("/api/shopify/products/lookup", { barcode });
@@ -1512,7 +1606,7 @@ async function lookupByBarcode() {
             return;
         }
 
-        applyLookupTemplate(result, barcode);
+        applyLookupData(result.product, `Found in: ${result.found_in_stores.join(", ")}`);
     } catch (err) {
         showToast(`Lookup failed: ${err.message}`, "error");
     } finally {
@@ -1521,17 +1615,15 @@ async function lookupByBarcode() {
     }
 }
 
-function applyLookupTemplate(result, barcode) {
+function applyLookupData(p, extraInfo) {
     state.templateMode = true;
-    state.templateProduct = result;
-
-    const p = result.product;
+    state.templateProduct = p;
 
     // Show template banner
     const banner = document.getElementById("sp-template-banner");
-    const storeList = result.found_in_stores.join(", ");
-    document.getElementById("sp-template-banner-text").textContent =
-        `Template: ${p.title} (barcode: ${barcode}) — Found in: ${storeList}`;
+    let bannerText = `Template: ${p.title}`;
+    if (extraInfo) bannerText += ` — ${extraInfo}`;
+    document.getElementById("sp-template-banner-text").textContent = bannerText;
     banner.classList.remove("hidden");
 
     // Fill form fields
@@ -1578,21 +1670,20 @@ function applyLookupTemplate(result, barcode) {
     document.getElementById("sp-sku").value = "";
     document.getElementById("sp-barcode").value = "";
 
-    // Clear search input
+    // Clear search inputs
     document.getElementById("sp-lookup-barcode").value = "";
+    document.getElementById("sp-lookup-title").value = "";
 
-    // Clear variants (template creates a simple product, user adds variants if needed)
+    // Clear variants (template creates a simple product)
     state.options = [];
     state.variants = [];
     renderVariantOptions();
 
-    // Update SEO preview
     updateSeoPreview();
 
     document.getElementById("sp-error-title").textContent = "";
-    showToast(`Product loaded from ${result.source_store}`, "success");
+    showToast("Product loaded as template", "success");
 
-    // Focus title for editing
     setTimeout(() => document.getElementById("sp-title")?.focus(), 100);
 }
 

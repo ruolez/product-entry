@@ -17,6 +17,8 @@ from services.shopify_service import (
     get_store_data,
     push_to_stores,
     lookup_product_by_barcode,
+    search_products,
+    get_product_detail,
 )
 from services.shopify_image_service import (
     process_images_for_store,
@@ -157,6 +159,31 @@ def lookup_product():
         return jsonify({"error": "Barcode is required"}), 400
     try:
         result = lookup_product_by_barcode(barcode)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@shopify_bp.route("/products/search")
+def search_shopify_products():
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify([])
+    try:
+        results = search_products(q, limit=50)
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@shopify_bp.route("/products/detail/<int:store_id>/<path:product_id>")
+def product_detail(store_id, product_id):
+    if not product_id.startswith("gid://"):
+        product_id = f"gid://shopify/Product/{product_id}"
+    try:
+        result = get_product_detail(store_id, product_id)
+        if not result:
+            return jsonify({"error": "Product not found"}), 404
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -370,6 +370,129 @@ def _normalize_lookup_result(product, variant):
     return result
 
 
+_SEARCH_QUERY = """
+{
+  products(first: %d, query: "%s") {
+    nodes {
+      id
+      title
+      vendor
+      productType
+      status
+      featuredMedia {
+        ... on MediaImage {
+          image { url }
+        }
+      }
+      variants(first: 5) {
+        nodes {
+          barcode
+          sku
+          price
+        }
+      }
+    }
+  }
+}
+"""
+
+
+def search_products(query, limit=50):
+    stores = get_all_shopify_stores(active_only=True)
+    if not stores:
+        return []
+
+    safe_query = query.replace('"', '\\"').replace("\\", "\\\\")
+    per_store_limit = min(limit, 50)
+    gql = _SEARCH_QUERY % (per_store_limit, safe_query)
+
+    results = []
+    seen_titles = set()
+
+    for store in stores:
+        try:
+            data = execute_graphql(store["id"], gql)
+            products = data.get("products", {}).get("nodes", [])
+            for p in products:
+                title = p.get("title", "")
+                dedup_key = f"{title}|{p.get('vendor', '')}"
+                if dedup_key in seen_titles:
+                    continue
+                seen_titles.add(dedup_key)
+
+                variants = p.get("variants", {}).get("nodes", [])
+                first_variant = variants[0] if variants else {}
+                barcodes = [v.get("barcode") for v in variants if v.get("barcode")]
+
+                results.append({
+                    "product_id": p["id"],
+                    "store_id": store["id"],
+                    "store_name": store["name"],
+                    "title": title,
+                    "vendor": p.get("vendor", ""),
+                    "productType": p.get("productType", ""),
+                    "status": p.get("status", ""),
+                    "price": first_variant.get("price", ""),
+                    "sku": first_variant.get("sku", ""),
+                    "barcode": barcodes[0] if barcodes else "",
+                })
+
+                if len(results) >= limit:
+                    return results
+        except Exception:
+            continue
+
+    return results
+
+
+_PRODUCT_DETAIL_QUERY = """
+query getProduct($id: ID!) {
+  product(id: $id) {
+    id
+    title
+    descriptionHtml
+    handle
+    vendor
+    productType
+    status
+    tags
+    templateSuffix
+    seo { title description }
+    metafields(first: 50) {
+      nodes { namespace key type value }
+    }
+    variants(first: 100) {
+      nodes {
+        id title sku barcode
+        price compareAtPrice
+        inventoryItem {
+          cost { amount }
+          tracked
+        }
+        taxable
+        inventoryPolicy
+        selectedOptions { name value }
+        weight
+        weightUnit
+      }
+    }
+  }
+}
+"""
+
+
+def get_product_detail(store_id, product_id):
+    data = execute_graphql(store_id, _PRODUCT_DETAIL_QUERY, {"id": product_id})
+    product = data.get("product")
+    if not product:
+        return None
+
+    variants = product.get("variants", {}).get("nodes", [])
+    first_variant = variants[0] if variants else {}
+
+    return _normalize_lookup_result(product, first_variant)
+
+
 def staged_uploads_create(store_id, files_info):
     query = """
     mutation stagedUploadsCreate($input: [StagedUploadInput!]!) {

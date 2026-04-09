@@ -1088,14 +1088,24 @@
                 <!-- Product Lookup -->
                 <div class="shopify-section" id="sp-section-lookup">
                     <div class="shopify-section-body" style="padding-top:var(--md-spacing-md);">
-                        <div class="form-group">
-                            <label>Product Lookup <span class="text-sm text-muted">(search by barcode across all Shopify stores)</span></label>
-                            <div style="display:flex;gap:var(--md-spacing-sm);">
-                                <input type="text" class="form-input" id="sp-lookup-barcode"
-                                       placeholder="Enter barcode to search..." autocomplete="off" style="flex:1;">
-                                <button class="btn btn-secondary" id="sp-lookup-btn" style="padding:6px 16px;font-size:0.8125rem;">
-                                    <span class="material-icons-round" style="font-size:16px;">search</span> Search
-                                </button>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--md-spacing-md);">
+                            <div class="form-group">
+                                <label>Search by Title <span class="text-sm text-muted">(autocomplete)</span></label>
+                                <div class="autocomplete-wrap">
+                                    <input type="text" class="form-input" id="sp-lookup-title"
+                                           placeholder="Type product title to search..." autocomplete="off">
+                                    <div class="autocomplete-dropdown hidden" id="sp-lookup-dropdown"></div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Search by Barcode <span class="text-sm text-muted">(exact match)</span></label>
+                                <div style="display:flex;gap:var(--md-spacing-sm);">
+                                    <input type="text" class="form-input" id="sp-lookup-barcode"
+                                           placeholder="Enter barcode..." autocomplete="off" style="flex:1;">
+                                    <button class="btn btn-secondary" id="sp-lookup-btn" style="padding:6px 16px;font-size:0.8125rem;">
+                                        <span class="material-icons-round" style="font-size:16px;">search</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div class="template-banner hidden" id="sp-template-banner" style="margin-top:var(--md-spacing-sm);">
