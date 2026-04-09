@@ -139,6 +139,7 @@ async function onStoreSelectionChange() {
     for (const sid of state.selectedStoreIds) {
         if (!state.perStoreProductData[sid]) {
             state.perStoreProductData[sid] = captureFormState();
+            console.log(`[Shopify] Initialized store ${sid} with:`, state.perStoreProductData[sid].title);
         }
     }
     // Remove data for deselected stores
@@ -205,14 +206,20 @@ function switchStore(newStoreId) {
 
     // Save current form to current store's data
     if (state.activeStoreId) {
-        state.perStoreProductData[state.activeStoreId] = captureFormState();
+        const saved = captureFormState();
+        state.perStoreProductData[state.activeStoreId] = saved;
+        console.log(`[Shopify] Saved store ${state.activeStoreId}:`, saved.title, saved.price);
     }
 
     state.activeStoreId = newStoreId;
 
     // Restore new store's form data
-    if (state.perStoreProductData[newStoreId]) {
-        restoreFormState(state.perStoreProductData[newStoreId]);
+    const snap = state.perStoreProductData[newStoreId];
+    if (snap) {
+        console.log(`[Shopify] Restoring store ${newStoreId}:`, snap.title, snap.price);
+        restoreFormState(snap);
+    } else {
+        console.log(`[Shopify] No data for store ${newStoreId}`);
     }
 
     renderStoreSelector();
@@ -262,6 +269,7 @@ function captureFormState() {
 }
 
 function restoreFormState(snap) {
+    console.log("[Shopify] restoreFormState called with:", JSON.stringify({title: snap.title, price: snap.price, vendor: snap.vendor}));
     document.getElementById("sp-title").value = snap.title || "";
     if (state.quill) {
         state.quill.root.innerHTML = snap.descriptionHtml || "";
