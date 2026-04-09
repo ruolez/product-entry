@@ -285,7 +285,8 @@ def lookup_product_by_barcode(barcode):
 
     query = _BARCODE_LOOKUP_QUERY % barcode
     found_in_stores = []
-    product_data = None
+    per_store_products = {}
+    first_product = None
 
     for store in stores:
         try:
@@ -304,20 +305,22 @@ def lookup_product_by_barcode(barcode):
                     continue
 
                 found_in_stores.append(store["name"])
-
-                if product_data is None:
-                    product_data = _normalize_lookup_result(product, matched_variant)
+                normalized = _normalize_lookup_result(product, matched_variant)
+                per_store_products[str(store["id"])] = normalized
+                if first_product is None:
+                    first_product = normalized
                 break
 
         except Exception:
             continue
 
-    if not product_data:
+    if not first_product:
         return {"found": False}
 
     return {
         "found": True,
-        "product": product_data,
+        "product": first_product,
+        "per_store_products": per_store_products,
         "found_in_stores": found_in_stores,
         "source_store": found_in_stores[0] if found_in_stores else None,
     }

@@ -1885,7 +1885,7 @@ async function lookupByBarcode() {
             return;
         }
 
-        applyLookupData(result.product, `Found in: ${result.found_in_stores.join(", ")}`);
+        applyLookupData(result.product, `Found in: ${result.found_in_stores.join(", ")}`, result.per_store_products);
     } catch (err) {
         showToast(`Lookup failed: ${err.message}`, "error");
     } finally {
@@ -1894,7 +1894,7 @@ async function lookupByBarcode() {
     }
 }
 
-function applyLookupData(p, extraInfo) {
+function applyLookupData(p, extraInfo, perStoreProducts) {
     state.templateMode = true;
     state.templateProduct = p;
 
@@ -1905,73 +1905,62 @@ function applyLookupData(p, extraInfo) {
     document.getElementById("sp-template-banner-text").textContent = bannerText;
     banner.classList.remove("hidden");
 
-    // Fill form fields
-    document.getElementById("sp-title").value = p.title || "";
-    if (state.quill && p.descriptionHtml) {
-        state.quill.root.innerHTML = p.descriptionHtml;
-        state.descriptionHtml = p.descriptionHtml;
-    }
-    document.getElementById("sp-vendor").value = p.vendor || "";
-    document.getElementById("sp-product-type").value = p.productType || "";
-    document.getElementById("sp-status").value = p.status || "DRAFT";
-
-    // Pricing
-    document.getElementById("sp-price").value = p.price || "";
-    document.getElementById("sp-compare-at-price").value = p.compareAtPrice || "";
-    document.getElementById("sp-cost").value = p.cost || "";
-    document.getElementById("sp-charge-tax").checked = p.taxable !== false;
-
-    // Shipping
-    if (p.weight) {
-        document.getElementById("sp-weight").value = p.weight;
-        document.getElementById("sp-weight-unit").value = p.weightUnit || "lb";
-        document.getElementById("sp-physical-product").checked = true;
-    }
-
-    // SEO
-    if (p.seo) {
-        document.getElementById("sp-seo-title").value = p.seo.title || "";
-        document.getElementById("sp-seo-description").value = p.seo.description || "";
-    }
-    document.getElementById("sp-seo-handle").value = "";
-    document.getElementById("sp-seo-handle")._userEdited = false;
-    document.getElementById("sp-template").value = p.templateSuffix || "";
-
-    // Tags
-    state.tags = Array.isArray(p.tags) ? [...p.tags] : [];
-    renderTags();
-
-    // Metafields
-    state.metafields = Array.isArray(p.metafields) ? p.metafields.map(mf => ({ ...mf })) : [];
-    renderMetafields();
-
-    // Clear identifiers — user fills new ones
-    document.getElementById("sp-sku").value = "";
-    document.getElementById("sp-barcode").value = "";
-
     // Clear search inputs
     document.getElementById("sp-lookup-barcode").value = "";
     document.getElementById("sp-lookup-title").value = "";
 
-    // Clear variants (template creates a simple product)
-    state.options = [];
-    state.variants = [];
-    renderVariantOptions();
-
-    updateSeoPreview();
-
-    document.getElementById("sp-error-title").textContent = "";
-
-    // Clone current form state to ALL selected stores
-    const snapshot = captureFormState();
+    // Build per-store snapshots from per-store product data
     state.perStoreProductData = {};
     for (const sid of state.selectedStoreIds) {
-        state.perStoreProductData[sid] = JSON.parse(JSON.stringify(snapshot));
+        const storeProduct = perStoreProducts?.[String(sid)] || p;
+        const snap = productToSnapshot(storeProduct);
+        state.perStoreProductData[sid] = snap;
     }
 
+    // Load active store's data into the form
+    const activeSnap = state.perStoreProductData[state.activeStoreId];
+    if (activeSnap) {
+        restoreFormState(activeSnap);
+    }
+
+    document.getElementById("sp-error-title").textContent = "";
     showToast("Product loaded as template", "success");
 
     setTimeout(() => document.getElementById("sp-title")?.focus(), 100);
+}
+
+function productToSnapshot(p) {
+    return {
+        title: p.title || "",
+        descriptionHtml: p.descriptionHtml || "",
+        vendor: p.vendor || "",
+        productType: p.productType || "",
+        status: p.status || "DRAFT",
+        price: p.price || "",
+        compareAtPrice: p.compareAtPrice || "",
+        cost: p.cost || "",
+        sku: "",
+        barcode: "",
+        chargeTax: p.taxable !== false,
+        trackInventory: true,
+        continueSelling: false,
+        physicalProduct: !!p.weight,
+        weight: p.weight || "",
+        weightUnit: p.weightUnit || "lb",
+        countryOrigin: "",
+        hsCode: "",
+        seoTitle: p.seo?.title || "",
+        seoDescription: p.seo?.description || "",
+        seoHandle: "",
+        seoHandleEdited: false,
+        seoTitleEdited: false,
+        template: p.templateSuffix || "",
+        tags: Array.isArray(p.tags) ? [...p.tags] : [],
+        metafields: Array.isArray(p.metafields) ? p.metafields.map(mf => ({ ...mf })) : [],
+        options: [],
+        variants: [],
+        selectedCollections: [],
+    };
 }
 
 function clearLookupTemplate() {
