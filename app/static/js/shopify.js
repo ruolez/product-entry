@@ -2023,7 +2023,7 @@ function productToSnapshot(p) {
         metafields: Array.isArray(p.metafields) ? p.metafields.map(mf => ({ ...mf })) : [],
         options: [],
         variants: [],
-        selectedCollections: [],
+        selectedCollections: Array.isArray(p.collections) ? p.collections.map(c => ({ ...c })) : [],
     };
 }
 

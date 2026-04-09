@@ -258,6 +258,9 @@ _BARCODE_LOOKUP_QUERY = """
       metafields(first: 50) {
         nodes { namespace key type value }
       }
+      collections(first: 50) {
+        nodes { id title }
+      }
       variants(first: 100) {
         nodes {
           id title sku barcode
@@ -356,6 +359,14 @@ def _normalize_lookup_result(product, variant):
             }
             for mf in metafields_nodes
             if mf.get("key")
+        ]
+
+    collections_nodes = product.get("collections", {}).get("nodes", [])
+    if collections_nodes:
+        result["collections"] = [
+            {"id": c.get("id"), "title": c.get("title", "")}
+            for c in collections_nodes
+            if c.get("id")
         ]
 
     if variant:
@@ -490,6 +501,9 @@ query getProduct($id: ID!) {
     seo { title description }
     metafields(first: 50) {
       nodes { namespace key type value }
+    }
+    collections(first: 50) {
+      nodes { id title }
     }
     variants(first: 100) {
       nodes {
