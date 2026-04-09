@@ -329,7 +329,11 @@ function restoreFormState(snap) {
 
     document.getElementById("sp-error-title").textContent = "";
 
-    if (state.addVariantMode && snap.isVariantProduct) {
+    const storeIsVariant = state.addVariantMode && snap.isVariantProduct;
+    if (storeIsVariant) {
+        // Sync per-store variant data to global state for this active store
+        state.existingVariants = (snap.existingVariants || []).map(v => ({ ...v }));
+        state.productOptions = (snap.productOptions || []).map(o => ({ name: o.name, values: [...o.values] }));
         renderAddVariantUI(snap);
         setAddVariantFieldVisibility(true);
     } else {
@@ -2325,12 +2329,22 @@ function applyLookupData(p, extraInfo, perStoreProducts) {
     document.getElementById("sp-lookup-barcode").value = "";
     document.getElementById("sp-lookup-title").value = "";
 
-    // Build per-store snapshots from per-store product data
+    // Build per-store snapshots — only stores that have the product get variant data
     state.perStoreProductData = {};
     for (const sid of state.selectedStoreIds) {
-        const storeProduct = perStoreProducts?.[String(sid)] || p;
-        const snap = productToSnapshot(storeProduct);
-        state.perStoreProductData[sid] = snap;
+        const storeProduct = perStoreProducts?.[String(sid)];
+        if (storeProduct) {
+            // Product found in this store — use its own data (may include variants)
+            state.perStoreProductData[sid] = productToSnapshot(storeProduct);
+        } else {
+            // Product NOT found in this store — use basic template without variants
+            const baseSnap = productToSnapshot(p);
+            delete baseSnap.isVariantProduct;
+            delete baseSnap.shopifyProductId;
+            delete baseSnap.existingVariants;
+            delete baseSnap.productOptions;
+            state.perStoreProductData[sid] = baseSnap;
+        }
     }
 
     // Load active store's data into the form
