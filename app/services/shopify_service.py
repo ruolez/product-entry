@@ -241,6 +241,33 @@ def get_tags(store_id):
     return data.get("productTags", {}).get("nodes", [])
 
 
+def check_duplicate_sku_barcode(store_id, sku=None, barcode=None):
+    results = {}
+    if sku:
+        query = '{products(first:1,query:"sku:%s status:active"){nodes{id title variants(first:100){nodes{sku}}}}}' % sku.replace('"', '\\"')
+        data = execute_graphql(store_id, query)
+        products = data.get("products", {}).get("nodes", [])
+        for p in products:
+            for v in p.get("variants", {}).get("nodes", []):
+                if v.get("sku") == sku:
+                    results["sku"] = {"product_title": p.get("title", ""), "product_id": p.get("id", "")}
+                    break
+            if "sku" in results:
+                break
+    if barcode:
+        query = '{products(first:1,query:"barcode:%s status:active"){nodes{id title variants(first:100){nodes{barcode}}}}}' % barcode.replace('"', '\\"')
+        data = execute_graphql(store_id, query)
+        products = data.get("products", {}).get("nodes", [])
+        for p in products:
+            for v in p.get("variants", {}).get("nodes", []):
+                if v.get("barcode") == barcode:
+                    results["barcode"] = {"product_title": p.get("title", ""), "product_id": p.get("id", "")}
+                    break
+            if "barcode" in results:
+                break
+    return results
+
+
 _BARCODE_LOOKUP_QUERY = """
 {
   products(first: 5, query: "barcode:%s status:active") {

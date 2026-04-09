@@ -75,6 +75,56 @@ function bindRequiredFieldClear() {
             if (errEl) errEl.textContent = "";
         });
     });
+    bindDuplicateCheck("sp-sku", "sp-barcode");
+}
+
+let _dupCheckTimer = null;
+function bindDuplicateCheck(skuId, barcodeId) {
+    const skuEl = document.getElementById(skuId);
+    const barcodeEl = document.getElementById(barcodeId);
+    const handler = () => {
+        clearTimeout(_dupCheckTimer);
+        _dupCheckTimer = setTimeout(() => runDuplicateCheck(skuId, barcodeId), 500);
+    };
+    skuEl?.addEventListener("input", handler);
+    barcodeEl?.addEventListener("input", handler);
+}
+
+async function runDuplicateCheck(skuId, barcodeId) {
+    const skuEl = document.getElementById(skuId);
+    const barcodeEl = document.getElementById(barcodeId);
+    const sku = skuEl?.value?.trim() || "";
+    const barcode = barcodeEl?.value?.trim() || "";
+    if (!sku && !barcode) return;
+    if (!state.activeStoreId) return;
+
+    try {
+        const result = await api.post("/api/shopify/products/check-duplicates", {
+            store_id: state.activeStoreId,
+            sku: sku || undefined,
+            barcode: barcode || undefined,
+        });
+        const skuErrId = skuId.replace("sp-", "sp-error-");
+        const barcodeErrId = barcodeId.replace("sp-", "sp-error-");
+        const skuErr = document.getElementById(skuErrId);
+        const barcodeErr = document.getElementById(barcodeErrId);
+        if (skuErr) {
+            if (result.sku) {
+                skuErr.textContent = `SKU already exists on "${result.sku.product_title}"`;
+                skuErr.style.color = "var(--md-error, #d93025)";
+            } else {
+                skuErr.textContent = "";
+            }
+        }
+        if (barcodeErr) {
+            if (result.barcode) {
+                barcodeErr.textContent = `Barcode already exists on "${result.barcode.product_title}"`;
+                barcodeErr.style.color = "var(--md-error, #d93025)";
+            } else {
+                barcodeErr.textContent = "";
+            }
+        }
+    } catch (_) {}
 }
 
 // ── Store Selector ─────────────────────────────────────
@@ -1447,11 +1497,14 @@ function renderAddVariantUI(snap) {
         }
     }
 
-    // Bind input events for duplicate detection
+    // Bind input events for duplicate variant combination detection
     productOptions.forEach((_, i) => {
         const input = document.getElementById(`sp-new-variant-opt-${i}`);
         if (input) input.addEventListener("input", checkDuplicateVariant);
     });
+
+    // Bind SKU/barcode duplicate check for variant fields
+    bindDuplicateCheck("sp-new-variant-sku", "sp-new-variant-barcode");
 
     // Expand variant section
     const variantSection = document.getElementById("sp-section-variants");

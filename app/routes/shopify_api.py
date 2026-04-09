@@ -20,6 +20,7 @@ from services.shopify_service import (
     lookup_product_by_barcode,
     search_products,
     get_product_detail,
+    check_duplicate_sku_barcode,
 )
 from services.shopify_image_service import (
     process_images_for_store,
@@ -185,6 +186,23 @@ def product_detail(store_id, product_id):
         result = get_product_detail(store_id, product_id)
         if not result:
             return jsonify({"error": "Product not found"}), 404
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@shopify_bp.route("/products/check-duplicates", methods=["POST"])
+def check_duplicates():
+    data = request.get_json()
+    store_id = data.get("store_id")
+    sku = (data.get("sku") or "").strip()
+    barcode = (data.get("barcode") or "").strip()
+    if not store_id:
+        return jsonify({"error": "store_id is required"}), 400
+    if not sku and not barcode:
+        return jsonify({})
+    try:
+        result = check_duplicate_sku_barcode(store_id, sku=sku or None, barcode=barcode or None)
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
