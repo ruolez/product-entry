@@ -131,8 +131,12 @@ function renderStoreSelector() {
                 } else {
                     // Select and switch to it
                     state.selectedStoreIds.push(id);
-                    // Initialize with current form state
-                    state.perStoreProductData[id] = captureFormState();
+                    // Use base template if in lookup mode, otherwise capture current form
+                    if (state.templateMode && state._lookupBaseTemplate) {
+                        state.perStoreProductData[id] = { ...state._lookupBaseTemplate };
+                    } else {
+                        state.perStoreProductData[id] = captureFormState();
+                    }
                     switchStore(id);
                     onStoreSelectionChange();
                 }
@@ -1675,9 +1679,12 @@ function validateForm() {
         state.perStoreProductData[state.activeStoreId] = captureFormState();
     }
 
-    // Add-variant mode validation
-    if (state.addVariantMode) {
-        // Validate all option fields have a value
+    // If any store is in add-variant mode, validate the variant form
+    const hasVariantStores = state.addVariantMode &&
+        state.selectedStoreIds.some(sid => state.perStoreProductData[sid]?.isVariantProduct);
+
+    if (hasVariantStores) {
+        // Validate variant option fields
         const unselected = state.productOptions.filter((_, i) => {
             const input = document.getElementById(`sp-new-variant-opt-${i}`);
             return !input?.value?.trim();
@@ -1689,13 +1696,11 @@ function validateForm() {
             return false;
         }
 
-        // Check duplicate combination
         if (checkDuplicateVariant()) {
             showToast("This variant combination already exists", "warning");
             return false;
         }
 
-        // Validate new variant required fields
         const newSku = document.getElementById("sp-new-variant-sku")?.value?.trim();
         const newBarcode = document.getElementById("sp-new-variant-barcode")?.value?.trim();
         const newPrice = document.getElementById("sp-new-variant-price")?.value?.trim();
@@ -1715,22 +1720,13 @@ function validateForm() {
             showToast(`Missing required variant fields: ${errors.join(", ")}`, "warning");
             return false;
         }
-
-        // Check that at least one store has the product
-        const storesWithProduct = state.selectedStoreIds.filter(sid => state.perStoreShopifyIds[sid]);
-        if (!storesWithProduct.length) {
-            showToast("Product not found in any selected store", "warning");
-            return false;
-        }
-
-        return true;
     }
 
-    // Standard (non-variant) validation
+    // Validate non-variant stores (create-product mode) need Title, SKU, Barcode
     const missingStores = [];
     for (const sid of state.selectedStoreIds) {
         const snap = state.perStoreProductData[sid];
-        if (!snap) continue;
+        if (!snap || snap.isVariantProduct) continue;
         const storeName = state.stores.find(s => s.id === sid)?.name || `Store ${sid}`;
         const missing = [];
         if (!snap.title?.trim()) missing.push("Title");
@@ -1746,7 +1742,6 @@ function validateForm() {
         if (first.sid !== state.activeStoreId) {
             switchStore(first.sid);
         }
-
         const requiredFields = [
             { id: "sp-title", errorId: "sp-error-title", label: "Title" },
             { id: "sp-sku", errorId: "sp-error-sku", label: "SKU" },
@@ -1765,12 +1760,10 @@ function validateForm() {
                 el.classList.remove("input-error");
             }
         }
-
         if (missingStores.length > 1) {
             const names = missingStores.map(s => s.storeName).join(", ");
             showToast(`Missing required fields on: ${names}`, "warning", 8000);
         }
-
         return false;
     }
 
@@ -1815,12 +1808,10 @@ async function saveProduct() {
             }
         }
 
-        // In add-variant mode, only target stores that have the product
-        const targetStoreIds = state.addVariantMode
-            ? state.selectedStoreIds.filter(sid => state.perStoreShopifyIds[sid])
-            : state.selectedStoreIds;
+        // All selected stores are targeted — variant stores get upsert, others get create
+        const targetStoreIds = state.selectedStoreIds;
 
-        const actionLabel = state.addVariantMode ? "Adding variant" : "Saving";
+        const actionLabel = state.addVariantMode ? "Saving" : "Saving";
         saveBtn.innerHTML = `<span class="spinner" style="width:18px;height:18px;border-width:2px;"></span> ${actionLabel} to ${targetStoreIds.length} store${targetStoreIds.length > 1 ? "s" : ""}...`;
 
         // Capture current active store's form
@@ -1847,10 +1838,7 @@ async function saveProduct() {
         });
 
         if (result.stores_succeeded?.length) {
-            const successMsg = state.addVariantMode
-                ? `Variant added on: ${result.stores_succeeded.join(", ")}`
-                : `Product created on: ${result.stores_succeeded.join(", ")}`;
-            showToast(successMsg, "success", 8000);
+            showToast(`Saved to: ${result.stores_succeeded.join(", ")}`, "success", 8000);
         }
         if (result.stores_failed?.length) {
             for (const name of result.stores_failed) {
@@ -2032,6 +2020,7 @@ function clearForm() {
     state.existingVariants = [];
     state.productOptions = [];
     state.perStoreShopifyIds = {};
+    state._lookupBaseTemplate = null;
 
     setAddVariantFieldVisibility(false);
     renderVariantOptions();
@@ -2329,23 +2318,37 @@ function applyLookupData(p, extraInfo, perStoreProducts) {
     document.getElementById("sp-lookup-barcode").value = "";
     document.getElementById("sp-lookup-title").value = "";
 
-    // Build per-store snapshots — only stores that have the product get variant data
+    // Build per-store snapshots and auto-uncheck stores without the product
     state.perStoreProductData = {};
+    const foundStoreIds = [];
+    const unfoundStoreNames = [];
     for (const sid of state.selectedStoreIds) {
         const storeProduct = perStoreProducts?.[String(sid)];
         if (storeProduct) {
-            // Product found in this store — use its own data (may include variants)
             state.perStoreProductData[sid] = productToSnapshot(storeProduct);
+            foundStoreIds.push(sid);
         } else {
-            // Product NOT found in this store — use basic template without variants
-            const baseSnap = productToSnapshot(p);
-            delete baseSnap.isVariantProduct;
-            delete baseSnap.shopifyProductId;
-            delete baseSnap.existingVariants;
-            delete baseSnap.productOptions;
-            state.perStoreProductData[sid] = baseSnap;
+            unfoundStoreNames.push(state.stores.find(s => s.id === sid)?.name || `Store ${sid}`);
         }
     }
+
+    // Auto-uncheck stores where product was not found
+    if (unfoundStoreNames.length && foundStoreIds.length) {
+        state.selectedStoreIds = foundStoreIds;
+        state.activeStoreId = foundStoreIds.includes(state.activeStoreId)
+            ? state.activeStoreId
+            : foundStoreIds[0] || null;
+        renderStoreSelector();
+        onStoreSelectionChange();
+        showToast(`Not found in: ${unfoundStoreNames.join(", ")} (unchecked)`, "info", 6000);
+    }
+
+    // Save a clean base template for stores that get re-checked later
+    state._lookupBaseTemplate = productToSnapshot(p);
+    delete state._lookupBaseTemplate.isVariantProduct;
+    delete state._lookupBaseTemplate.shopifyProductId;
+    delete state._lookupBaseTemplate.existingVariants;
+    delete state._lookupBaseTemplate.productOptions;
 
     // Load active store's data into the form
     const activeSnap = state.perStoreProductData[state.activeStoreId];
