@@ -1275,7 +1275,12 @@ function renderAddVariantUI(snap) {
 
     const existingVariants = snap?.existingVariants || state.existingVariants || [];
     const productOptions = snap?.productOptions || state.productOptions || [];
-    const savedNew = snap?.newVariant || {};
+    const firstVariant = existingVariants[0] || {};
+    const savedNew = snap?.newVariant || {
+        price: firstVariant.price || "",
+        compareAtPrice: firstVariant.compareAtPrice || "",
+        cost: firstVariant.cost || "",
+    };
 
     // Existing variants read-only table
     tableContainer.classList.remove("hidden");
