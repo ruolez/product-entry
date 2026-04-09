@@ -1127,6 +1127,16 @@
                             <input type="text" class="form-input" id="sp-title" placeholder="Short sleeve t-shirt">
                             <div class="field-error" id="sp-error-title"></div>
                         </div>
+                        <div class="flex-row" style="margin-bottom:var(--md-spacing-md);">
+                            <div class="form-group">
+                                <label>SKU (Stock Keeping Unit)</label>
+                                <input type="text" class="form-input" id="sp-sku" placeholder="">
+                            </div>
+                            <div class="form-group">
+                                <label>Barcode (ISBN, UPC, GTIN, etc.)</label>
+                                <input type="text" class="form-input" id="sp-barcode" placeholder="">
+                            </div>
+                        </div>
                         <div class="form-group">
                             <label>Description</label>
                             <div id="sp-description-editor" style="min-height:160px;"></div>
@@ -1217,16 +1227,6 @@
                             <p class="text-muted text-sm">Select a store to load locations</p>
                         </div>
                         <div style="margin-top:var(--md-spacing-md); padding-top:var(--md-spacing-md); border-top:1px solid var(--md-outline-variant);">
-                            <div class="flex-row">
-                                <div class="form-group">
-                                    <label>SKU (Stock Keeping Unit)</label>
-                                    <input type="text" class="form-input" id="sp-sku" placeholder="">
-                                </div>
-                                <div class="form-group">
-                                    <label>Barcode (ISBN, UPC, GTIN, etc.)</label>
-                                    <input type="text" class="form-input" id="sp-barcode" placeholder="">
-                                </div>
-                            </div>
                             <label class="form-checkbox">
                                 <input type="checkbox" id="sp-continue-selling">
                                 Continue selling when out of stock
