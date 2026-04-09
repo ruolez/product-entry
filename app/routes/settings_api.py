@@ -107,11 +107,21 @@ def update_store(store_id):
 @settings_bp.route("/stores/<int:store_id>", methods=["DELETE"])
 def delete_store(store_id):
     db.session.execute(
-        db.text("UPDATE stores SET is_active = FALSE, updated_at = NOW() WHERE id = :id"),
+        db.text("DELETE FROM stores WHERE id = :id"),
         {"id": store_id},
     )
     db.session.commit()
-    return jsonify({"message": "Store deactivated"})
+    return jsonify({"message": "Store deleted"})
+
+
+@settings_bp.route("/stores/<int:store_id>/toggle-active", methods=["POST"])
+def toggle_store_active(store_id):
+    db.session.execute(
+        db.text("UPDATE stores SET is_active = NOT is_active, updated_at = NOW() WHERE id = :id"),
+        {"id": store_id},
+    )
+    db.session.commit()
+    return jsonify({"message": "Store status toggled"})
 
 
 @settings_bp.route("/stores/<int:store_id>/test", methods=["POST"])
@@ -284,11 +294,21 @@ def update_shopify_store(store_id):
 @settings_bp.route("/shopify-stores/<int:store_id>", methods=["DELETE"])
 def delete_shopify_store(store_id):
     db.session.execute(
-        db.text("UPDATE shopify_stores SET is_active = FALSE, updated_at = NOW() WHERE id = :id"),
+        db.text("DELETE FROM shopify_stores WHERE id = :id"),
         {"id": store_id},
     )
     db.session.commit()
-    return jsonify({"message": "Shopify store deactivated"})
+    return jsonify({"message": "Shopify store deleted"})
+
+
+@settings_bp.route("/shopify-stores/<int:store_id>/toggle-active", methods=["POST"])
+def toggle_shopify_store_active(store_id):
+    db.session.execute(
+        db.text("UPDATE shopify_stores SET is_active = NOT is_active, updated_at = NOW() WHERE id = :id"),
+        {"id": store_id},
+    )
+    db.session.commit()
+    return jsonify({"message": "Shopify store status toggled"})
 
 
 @settings_bp.route("/shopify-stores/<int:store_id>/test", methods=["POST"])

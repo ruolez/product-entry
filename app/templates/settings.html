@@ -218,6 +218,44 @@
         font-size: 0.8125rem;
     }
 
+    .confirm-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.32);
+        z-index: 300;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .confirm-modal {
+        background: var(--md-surface);
+        border-radius: var(--md-radius-md);
+        box-shadow: var(--md-elevation-3);
+        padding: var(--md-spacing-lg);
+        max-width: 400px;
+        width: 90%;
+    }
+    .confirm-modal h3 {
+        font-family: var(--md-font-family);
+        font-size: 1rem;
+        font-weight: 500;
+        margin-bottom: var(--md-spacing-sm);
+    }
+    .confirm-modal p {
+        font-size: 0.875rem;
+        color: var(--md-on-surface-variant);
+        margin-bottom: var(--md-spacing-lg);
+    }
+    .confirm-modal-actions {
+        display: flex;
+        gap: var(--md-spacing-sm);
+        justify-content: flex-end;
+    }
+    .confirm-modal-actions .btn {
+        padding: 8px 20px;
+        font-size: 0.8125rem;
+    }
+
     @media (max-width: 900px) {
         .store-card { grid-template-columns: 1fr 1fr; }
         .shopify-store-card { grid-template-columns: 1fr 1fr; }
@@ -447,12 +485,13 @@
         </div>
     </div>
 </div>
+<div id="confirm-container"></div>
 {% endblock %}
 
 {% block scripts %}
 <script type="module">
 import { api } from "/static/js/api-client.js";
-import { showToast } from "/static/js/utils.js";
+import { showToast, escapeHtml } from "/static/js/utils.js";
 
 let stores = [];
 let shopifyStores = [];
@@ -548,6 +587,12 @@ function renderStores() {
                 </button>
                 <button class="btn btn-icon btn-secondary" onclick="testStoreConnection(${s.id}, this)" title="Test Connection">
                     <span class="material-icons-round" style="font-size:16px;">cable</span>
+                </button>
+                <button class="btn btn-icon btn-secondary" onclick="toggleStoreActive(${s.id})" title="${s.is_active ? 'Disable' : 'Enable'}">
+                    <span class="material-icons-round" style="font-size:16px;">${s.is_active ? 'visibility_off' : 'visibility'}</span>
+                </button>
+                <button class="btn btn-icon btn-secondary" onclick="deleteStore(${s.id}, '${s.name.replace(/'/g, "\\'")}')" title="Delete" style="color:var(--md-error);">
+                    <span class="material-icons-round" style="font-size:16px;">delete</span>
                 </button>
             </div>
         </div>
@@ -658,6 +703,28 @@ window.togglePrimary = async function(id, setPrimary) {
     }
 };
 
+window.toggleStoreActive = async function(id) {
+    try {
+        await api.post(`/api/settings/stores/${id}/toggle-active`);
+        showToast("Store status updated", "success");
+        await loadStores();
+    } catch (err) {
+        showToast(`Error: ${err.message}`, "error");
+    }
+};
+
+window.deleteStore = async function(id, name) {
+    const confirmed = await showConfirm("Delete Store", `Permanently delete "${name}"? This will also remove its price formulas and field defaults.`);
+    if (!confirmed) return;
+    try {
+        await api.delete(`/api/settings/stores/${id}`);
+        showToast("Store deleted", "success");
+        await loadStores();
+    } catch (err) {
+        showToast(`Error: ${err.message}`, "error");
+    }
+};
+
 // ── SHOPIFY STORES ──
 async function loadShopifyStores() {
     try {
@@ -698,6 +765,12 @@ function renderShopifyStores() {
                 </button>
                 <button class="btn btn-icon btn-secondary" onclick="testShopifyConnection(${s.id}, this)" title="Test Connection">
                     <span class="material-icons-round" style="font-size:16px;">cable</span>
+                </button>
+                <button class="btn btn-icon btn-secondary" onclick="toggleShopifyStoreActive(${s.id})" title="${s.is_active ? 'Disable' : 'Enable'}">
+                    <span class="material-icons-round" style="font-size:16px;">${s.is_active ? 'visibility_off' : 'visibility'}</span>
+                </button>
+                <button class="btn btn-icon btn-secondary" onclick="deleteShopifyStore(${s.id}, '${s.name.replace(/'/g, "\\'")}')" title="Delete" style="color:var(--md-error);">
+                    <span class="material-icons-round" style="font-size:16px;">delete</span>
                 </button>
             </div>
         </div>
@@ -848,6 +921,28 @@ window.testShopifyConnection = async function(id, btn) {
         showToast(`Error: ${err.data?.message || err.message}`, "error");
     }
     btn.innerHTML = origHtml;
+};
+
+window.toggleShopifyStoreActive = async function(id) {
+    try {
+        await api.post(`/api/settings/shopify-stores/${id}/toggle-active`);
+        showToast("Shopify store status updated", "success");
+        await loadShopifyStores();
+    } catch (err) {
+        showToast(`Error: ${err.message}`, "error");
+    }
+};
+
+window.deleteShopifyStore = async function(id, name) {
+    const confirmed = await showConfirm("Delete Shopify Store", `Permanently delete "${name}"? This cannot be undone.`);
+    if (!confirmed) return;
+    try {
+        await api.delete(`/api/settings/shopify-stores/${id}`);
+        showToast("Shopify store deleted", "success");
+        await loadShopifyStores();
+    } catch (err) {
+        showToast(`Error: ${err.message}`, "error");
+    }
 };
 
 // ── PRICE FORMULAS ──
@@ -1030,6 +1125,37 @@ function bindFieldEvents() {
         } catch (err) {
             showToast(`Error: ${err.message}`, "error");
         }
+    });
+}
+
+function showConfirm(title, message) {
+    return new Promise(resolve => {
+        const container = document.getElementById("confirm-container");
+        container.innerHTML = `
+            <div class="confirm-overlay" id="confirm-overlay">
+                <div class="confirm-modal">
+                    <h3>${escapeHtml(title)}</h3>
+                    <p>${escapeHtml(message)}</p>
+                    <div class="confirm-modal-actions">
+                        <button class="btn btn-secondary" id="confirm-cancel">Cancel</button>
+                        <button class="btn btn-danger" id="confirm-ok">Delete</button>
+                    </div>
+                </div>
+            </div>`;
+        document.getElementById("confirm-cancel").addEventListener("click", () => {
+            container.innerHTML = "";
+            resolve(false);
+        });
+        document.getElementById("confirm-ok").addEventListener("click", () => {
+            container.innerHTML = "";
+            resolve(true);
+        });
+        document.getElementById("confirm-overlay").addEventListener("click", e => {
+            if (e.target === e.currentTarget) {
+                container.innerHTML = "";
+                resolve(false);
+            }
+        });
     });
 }
 </script>
