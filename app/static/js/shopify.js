@@ -269,8 +269,10 @@ function captureFormState() {
 }
 
 function restoreFormState(snap) {
+    const titleBefore = document.getElementById("sp-title").value;
     console.log("[Shopify] restoreFormState called with:", JSON.stringify({title: snap.title, price: snap.price, vendor: snap.vendor}));
     document.getElementById("sp-title").value = snap.title || "";
+    console.log(`[Shopify] Title: "${titleBefore}" → "${document.getElementById("sp-title").value}"`);
     if (state.quill) {
         state.quill.root.innerHTML = snap.descriptionHtml || "";
         state.descriptionHtml = snap.descriptionHtml || "";
