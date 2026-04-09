@@ -47,6 +47,16 @@
     color: var(--md-primary);
 }
 
+.store-chip.active-tab {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    border-color: var(--md-primary);
+}
+
+.store-chip.active-tab:hover {
+    background: var(--md-primary-hover);
+}
+
 .store-chip .chip-check {
     font-size: 16px;
     display: none;

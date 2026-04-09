@@ -713,6 +713,57 @@ def push_to_stores(store_ids, product_data, per_store_image_urls=None):
     return results
 
 
+def push_to_stores_per_store(store_ids, per_store_product_data, per_store_image_urls=None):
+    results = {
+        "stores_succeeded": [],
+        "stores_failed": [],
+        "error_details": {},
+        "product_ids": {},
+    }
+
+    per_store_urls = per_store_image_urls or {}
+    first_product_data = None
+
+    for sid in store_ids:
+        store = get_shopify_store(sid)
+        store_name = store["name"] if store else f"Store {sid}"
+        product_data = per_store_product_data.get(str(sid), {})
+        if first_product_data is None:
+            first_product_data = product_data
+
+        try:
+            store_image_urls = per_store_urls.get(sid, [])
+            product_input = _build_product_set_input(product_data, store_image_urls)
+            product = create_product(sid, product_input)
+
+            if not product:
+                raise RuntimeError("No product returned")
+
+            product_id = product["id"]
+            results["product_ids"][store_name] = product_id
+            results["stores_succeeded"].append(store_name)
+
+            inventory = product_data.get("inventory", {})
+            store_inv = inventory.get("location_quantities", {})
+
+            if store_inv:
+                variants = product.get("variants", {}).get("edges", [])
+                for variant_edge in variants:
+                    inv_item_id = variant_edge["node"]["inventoryItem"]["id"]
+                    set_inventory_quantities(sid, inv_item_id, store_inv)
+
+            pub_ids = product_data.get("publication_ids", [])
+            if pub_ids:
+                publish_product(sid, product_id, pub_ids)
+
+        except Exception as e:
+            results["stores_failed"].append(store_name)
+            results["error_details"][store_name] = str(e)
+
+    _log_insertion(first_product_data or {}, results)
+    return results
+
+
 def _build_product_set_input(product_data, image_resource_urls=None):
     product = product_data.get("product", {})
     inp = {"title": product.get("title", "")}

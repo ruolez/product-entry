@@ -16,6 +16,7 @@ from services.shopify_service import (
     get_tags,
     get_store_data,
     push_to_stores,
+    push_to_stores_per_store,
     lookup_product_by_barcode,
     search_products,
     get_product_detail,
@@ -214,13 +215,20 @@ def create_product():
     data = request.get_json()
     store_ids = data.get("store_ids", [])
     product_data = data.get("product_data", {})
+    per_store_product_data = data.get("per_store_product_data")
     image_ids = data.get("image_ids", [])
     image_mode = data.get("image_mode", "shared")
     per_store_image_ids = data.get("per_store_image_ids", {})
 
     if not store_ids:
         return jsonify({"error": "No stores selected"}), 400
-    if not product_data.get("product", {}).get("title"):
+
+    # Validate title — check per-store or shared
+    if per_store_product_data:
+        first_data = next(iter(per_store_product_data.values()), {})
+        if not first_data.get("product", {}).get("title"):
+            return jsonify({"error": "Product title is required"}), 400
+    elif not product_data.get("product", {}).get("title"):
         return jsonify({"error": "Product title is required"}), 400
 
     raw_images = _collect_raw_images(image_ids)
@@ -241,7 +249,10 @@ def create_product():
                 per_store_urls[sid] = urls
 
     try:
-        results = push_to_stores(store_ids, product_data, per_store_urls)
+        if per_store_product_data:
+            results = push_to_stores_per_store(store_ids, per_store_product_data, per_store_urls)
+        else:
+            results = push_to_stores(store_ids, product_data, per_store_urls)
         _cleanup_temp_images(image_ids)
         for ids in per_store_image_ids.values():
             _cleanup_temp_images(ids)

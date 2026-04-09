@@ -25,6 +25,8 @@ const state = {
     initialized: false,
     templateMode: false,
     templateProduct: null,
+    perStoreProductData: {},
+    activeStoreId: null,
 };
 
 // ── Init ───────────────────────────────────────────────
@@ -74,7 +76,9 @@ function renderStoreSelector() {
     const allSelected = state.selectedStoreIds.length === state.stores.length && state.stores.length > 0;
     const chips = state.stores.map(s => {
         const sel = state.selectedStoreIds.includes(s.id);
-        return `<button class="store-chip ${sel ? "selected" : ""}" data-id="${s.id}">${escapeHtml(s.name)}</button>`;
+        const active = s.id === state.activeStoreId;
+        const cls = active ? "selected active-tab" : sel ? "selected" : "";
+        return `<button class="store-chip ${cls}" data-id="${s.id}">${escapeHtml(s.name)}</button>`;
     }).join("");
 
     container.innerHTML = `
@@ -89,25 +93,63 @@ function renderStoreSelector() {
         chip.addEventListener("click", () => {
             if (chip.classList.contains("store-chip-all")) {
                 state.selectedStoreIds = allSelected ? [] : state.stores.map(s => s.id);
+                renderStoreSelector();
+                onStoreSelectionChange();
             } else {
                 const id = parseInt(chip.dataset.id);
-                if (state.selectedStoreIds.includes(id)) {
-                    state.selectedStoreIds = state.selectedStoreIds.filter(x => x !== id);
+                const wasSelected = state.selectedStoreIds.includes(id);
+                if (wasSelected) {
+                    // If clicking the active store, deselect it
+                    if (id === state.activeStoreId) {
+                        state.selectedStoreIds = state.selectedStoreIds.filter(x => x !== id);
+                        delete state.perStoreProductData[id];
+                        state.activeStoreId = state.selectedStoreIds[0] || null;
+                        if (state.activeStoreId && state.perStoreProductData[state.activeStoreId]) {
+                            restoreFormState(state.perStoreProductData[state.activeStoreId]);
+                        }
+                        renderStoreSelector();
+                        onStoreSelectionChange();
+                    } else {
+                        // Click a selected (but not active) store → switch to it
+                        switchStore(id);
+                    }
                 } else {
+                    // Select and switch to it
                     state.selectedStoreIds.push(id);
+                    // Initialize with current form state
+                    state.perStoreProductData[id] = captureFormState();
+                    switchStore(id);
+                    onStoreSelectionChange();
                 }
             }
-            renderStoreSelector();
-            onStoreSelectionChange();
         });
     });
 }
 
 async function onStoreSelectionChange() {
     const count = state.selectedStoreIds.length;
+    const activeStore = state.stores.find(s => s.id === state.activeStoreId);
+    const activeLabel = activeStore ? ` — editing: ${activeStore.name}` : "";
     document.getElementById("sp-store-count-label").textContent =
-        count === 0 ? "No stores selected" : `${count} store${count > 1 ? "s" : ""} selected`;
+        count === 0 ? "No stores selected" : `${count} store${count > 1 ? "s" : ""} selected${activeLabel}`;
     document.getElementById("sp-btn-save").disabled = count === 0;
+
+    // Set active store if none
+    if (!state.activeStoreId && state.selectedStoreIds.length) {
+        state.activeStoreId = state.selectedStoreIds[0];
+    }
+    // Initialize per-store data for new stores
+    for (const sid of state.selectedStoreIds) {
+        if (!state.perStoreProductData[sid]) {
+            state.perStoreProductData[sid] = captureFormState();
+        }
+    }
+    // Remove data for deselected stores
+    for (const sid of Object.keys(state.perStoreProductData)) {
+        if (!state.selectedStoreIds.includes(parseInt(sid))) {
+            delete state.perStoreProductData[sid];
+        }
+    }
 
     for (const sid of state.selectedStoreIds) {
         if (state._loaded?.[sid]) continue;
@@ -155,6 +197,212 @@ async function onStoreSelectionChange() {
     renderPerStoreMediaUI();
     renderWatermarkPreviews();
     rebindAutocompletes();
+}
+
+function switchStore(newStoreId) {
+    if (state.activeStoreId === newStoreId) return;
+
+    // Save current form to current store's data
+    if (state.activeStoreId) {
+        state.perStoreProductData[state.activeStoreId] = captureFormState();
+    }
+
+    state.activeStoreId = newStoreId;
+
+    // Restore new store's form data
+    if (state.perStoreProductData[newStoreId]) {
+        restoreFormState(state.perStoreProductData[newStoreId]);
+    }
+
+    renderStoreSelector();
+
+    // Update status label
+    const activeStore = state.stores.find(s => s.id === newStoreId);
+    const count = state.selectedStoreIds.length;
+    const activeLabel = activeStore ? ` — editing: ${activeStore.name}` : "";
+    document.getElementById("sp-store-count-label").textContent =
+        `${count} store${count > 1 ? "s" : ""} selected${activeLabel}`;
+}
+
+function captureFormState() {
+    return {
+        title: document.getElementById("sp-title").value,
+        descriptionHtml: state.descriptionHtml || "",
+        vendor: document.getElementById("sp-vendor").value,
+        productType: document.getElementById("sp-product-type").value,
+        status: document.getElementById("sp-status").value,
+        price: document.getElementById("sp-price").value,
+        compareAtPrice: document.getElementById("sp-compare-at-price").value,
+        cost: document.getElementById("sp-cost").value,
+        sku: document.getElementById("sp-sku").value,
+        barcode: document.getElementById("sp-barcode").value,
+        chargeTax: document.getElementById("sp-charge-tax").checked,
+        trackInventory: document.getElementById("sp-track-inventory").checked,
+        continueSelling: document.getElementById("sp-continue-selling").checked,
+        physicalProduct: document.getElementById("sp-physical-product").checked,
+        weight: document.getElementById("sp-weight").value,
+        weightUnit: document.getElementById("sp-weight-unit").value,
+        countryOrigin: document.getElementById("sp-country-origin").value,
+        hsCode: document.getElementById("sp-hs-code").value,
+        seoTitle: document.getElementById("sp-seo-title").value,
+        seoDescription: document.getElementById("sp-seo-description").value,
+        seoHandle: document.getElementById("sp-seo-handle").value,
+        seoHandleEdited: document.getElementById("sp-seo-handle")._userEdited || false,
+        seoTitleEdited: document.getElementById("sp-seo-title")._userEdited || false,
+        template: document.getElementById("sp-template").value,
+        tags: [...state.tags],
+        metafields: state.metafields.map(mf => ({ ...mf })),
+        options: state.options.map(o => ({ ...o, values: [...o.values] })),
+        variants: state.variants.map(v => ({ ...v })),
+        selectedCollections: state.selectedCollections.map(c => ({ ...c })),
+    };
+}
+
+function restoreFormState(snap) {
+    document.getElementById("sp-title").value = snap.title || "";
+    if (state.quill) {
+        state.quill.root.innerHTML = snap.descriptionHtml || "";
+        state.descriptionHtml = snap.descriptionHtml || "";
+    }
+    document.getElementById("sp-vendor").value = snap.vendor || "";
+    document.getElementById("sp-product-type").value = snap.productType || "";
+    document.getElementById("sp-status").value = snap.status || "DRAFT";
+    document.getElementById("sp-price").value = snap.price || "";
+    document.getElementById("sp-compare-at-price").value = snap.compareAtPrice || "";
+    document.getElementById("sp-cost").value = snap.cost || "";
+    document.getElementById("sp-sku").value = snap.sku || "";
+    document.getElementById("sp-barcode").value = snap.barcode || "";
+    document.getElementById("sp-charge-tax").checked = snap.chargeTax !== false;
+    document.getElementById("sp-track-inventory").checked = snap.trackInventory !== false;
+    document.getElementById("sp-continue-selling").checked = !!snap.continueSelling;
+    document.getElementById("sp-physical-product").checked = snap.physicalProduct !== false;
+    document.getElementById("sp-weight").value = snap.weight || "";
+    document.getElementById("sp-weight-unit").value = snap.weightUnit || "lb";
+    document.getElementById("sp-country-origin").value = snap.countryOrigin || "";
+    document.getElementById("sp-hs-code").value = snap.hsCode || "";
+    document.getElementById("sp-seo-title").value = snap.seoTitle || "";
+    document.getElementById("sp-seo-title")._userEdited = !!snap.seoTitleEdited;
+    document.getElementById("sp-seo-description").value = snap.seoDescription || "";
+    document.getElementById("sp-seo-handle").value = snap.seoHandle || "";
+    document.getElementById("sp-seo-handle")._userEdited = !!snap.seoHandleEdited;
+    document.getElementById("sp-template").value = snap.template || "";
+
+    state.tags = Array.isArray(snap.tags) ? [...snap.tags] : [];
+    state.metafields = Array.isArray(snap.metafields) ? snap.metafields.map(mf => ({ ...mf })) : [];
+    state.options = Array.isArray(snap.options) ? snap.options.map(o => ({ ...o, values: [...(o.values || [])] })) : [];
+    state.variants = Array.isArray(snap.variants) ? snap.variants.map(v => ({ ...v })) : [];
+    state.selectedCollections = Array.isArray(snap.selectedCollections) ? snap.selectedCollections.map(c => ({ ...c })) : [];
+
+    renderTags();
+    renderMetafields();
+    renderVariantOptions();
+    renderCollectionChips();
+    updateSeoPreview();
+
+    document.getElementById("sp-error-title").textContent = "";
+}
+
+function buildProductDataFromSnapshot(snap, storeId) {
+    const product = {
+        title: snap.title || "",
+        descriptionHtml: snap.descriptionHtml || "",
+        vendor: snap.vendor || "",
+        productType: snap.productType || "",
+        tags: snap.tags || [],
+        status: snap.status || "DRAFT",
+        handle: snap.seoHandle || undefined,
+        templateSuffix: snap.template || undefined,
+    };
+
+    const seoTitle = snap.seoTitle || "";
+    const seoDesc = snap.seoDescription || "";
+    if (seoTitle || seoDesc) {
+        product.seo = { title: seoTitle || undefined, description: seoDesc || undefined };
+    }
+
+    const mfs = (snap.metafields || []).filter(mf => mf.key && mf.value);
+    if (mfs.length) {
+        product.metafields = mfs.map(mf => ({
+            namespace: mf.namespace || "custom",
+            key: mf.key,
+            type: mf.type,
+            value: mf.value,
+        }));
+    }
+
+    if (snap.selectedCollections && snap.selectedCollections.length) {
+        product.collectionsToJoin = snap.selectedCollections.map(c => c.id);
+    }
+
+    const trackInventory = snap.trackInventory !== false;
+    const taxable = snap.chargeTax !== false;
+    const inventoryPolicy = snap.continueSelling ? "CONTINUE" : "DENY";
+
+    if (snap.options && snap.options.length && snap.variants && snap.variants.length) {
+        product.productOptions = snap.options
+            .filter(o => o.name && o.values.length)
+            .map(o => ({ name: o.name, values: o.values.map(v => ({ name: v })) }));
+        product.variants = snap.variants.map(v => ({
+            optionValues: v.optionValues,
+            price: parseFloat(v.price) || 0,
+            compareAtPrice: v.compareAtPrice ? parseFloat(v.compareAtPrice) : undefined,
+            inventoryItem: { tracked: trackInventory, cost: v.cost ? parseFloat(v.cost) : undefined },
+            inventoryPolicy,
+            sku: v.sku || undefined,
+            barcode: v.barcode || undefined,
+            taxable,
+        }));
+    } else {
+        product.productOptions = [{ name: "Title", values: [{ name: "Default Title" }] }];
+        product.variants = [{
+            price: parseFloat(snap.price) || 0,
+            compareAtPrice: snap.compareAtPrice ? parseFloat(snap.compareAtPrice) : undefined,
+            inventoryItem: { tracked: trackInventory, cost: snap.cost ? parseFloat(snap.cost) : undefined },
+            inventoryPolicy,
+            sku: snap.sku || undefined,
+            barcode: snap.barcode || undefined,
+            taxable,
+            optionValues: [{ optionName: "Title", name: "Default Title" }],
+        }];
+    }
+
+    const result = { product };
+
+    // Inventory for this store
+    const sid = String(storeId);
+    const locationQuantities = {};
+    document.querySelectorAll(`#sp-inventory-locations input[data-store="${sid}"]`).forEach(input => {
+        const qty = parseInt(input.value) || 0;
+        if (qty > 0) locationQuantities[input.dataset.location] = qty;
+    });
+    if (Object.keys(locationQuantities).length) {
+        result.inventory = { location_quantities: locationQuantities };
+    }
+
+    // Publications for this store
+    const pubIds = [];
+    document.querySelectorAll(`#sp-publications input[data-store-id="${sid}"]`).forEach(input => {
+        if (input.checked) pubIds.push(input.dataset.pubId);
+    });
+    if (pubIds.length) result.publication_ids = pubIds;
+
+    // Shipping
+    if (snap.physicalProduct) {
+        const weight = parseFloat(snap.weight);
+        if (weight > 0) {
+            result.shipping = { weight, weightUnit: (snap.weightUnit || "lb").toUpperCase() };
+        }
+        if (snap.countryOrigin) {
+            result.shipping = result.shipping || {};
+            result.shipping.countryOfOrigin = snap.countryOrigin;
+        }
+        if (snap.hsCode) {
+            result.shipping = result.shipping || {};
+            result.shipping.hsCode = snap.hsCode;
+        }
+    }
+
+    return result;
 }
 
 function rebindAutocompletes() {
@@ -1186,10 +1434,23 @@ async function saveProduct() {
 
         saveBtn.innerHTML = `<span class="spinner" style="width:18px;height:18px;border-width:2px;"></span> Saving to ${state.selectedStoreIds.length} store${state.selectedStoreIds.length > 1 ? "s" : ""}...`;
 
-        const productData = collectFormData();
+        // Capture current active store's form
+        if (state.activeStoreId) {
+            state.perStoreProductData[state.activeStoreId] = captureFormState();
+        }
+
+        // Build per-store product data
+        const perStoreProductData = {};
+        for (const sid of state.selectedStoreIds) {
+            const snap = state.perStoreProductData[sid];
+            if (snap) {
+                perStoreProductData[sid] = buildProductDataFromSnapshot(snap, sid);
+            }
+        }
+
         const result = await api.post("/api/shopify/products", {
             store_ids: state.selectedStoreIds,
-            product_data: productData,
+            per_store_product_data: perStoreProductData,
             image_ids: imageIds,
             image_mode: state.imageMode,
             per_store_image_ids: perStoreImageIds,
@@ -1385,6 +1646,13 @@ function clearForm() {
 
     document.getElementById("sp-error-title").textContent = "";
     document.getElementById("sp-watermark-previews").innerHTML = "";
+
+    // Clear per-store data and re-init from blank form
+    state.perStoreProductData = {};
+    for (const sid of state.selectedStoreIds) {
+        state.perStoreProductData[sid] = captureFormState();
+    }
+
     showToast("Form cleared", "info");
 }
 
@@ -1682,6 +1950,14 @@ function applyLookupData(p, extraInfo) {
     updateSeoPreview();
 
     document.getElementById("sp-error-title").textContent = "";
+
+    // Clone current form state to ALL selected stores
+    const snapshot = captureFormState();
+    state.perStoreProductData = {};
+    for (const sid of state.selectedStoreIds) {
+        state.perStoreProductData[sid] = JSON.parse(JSON.stringify(snapshot));
+    }
+
     showToast("Product loaded as template", "success");
 
     setTimeout(() => document.getElementById("sp-title")?.focus(), 100);
