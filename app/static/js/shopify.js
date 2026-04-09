@@ -59,6 +59,17 @@ async function initShopifyOnce() {
     bindSeoSync();
     bindActionButtons();
     initLookup();
+    bindRequiredFieldClear();
+}
+
+function bindRequiredFieldClear() {
+    ["sp-title", "sp-sku", "sp-barcode"].forEach(id => {
+        document.getElementById(id)?.addEventListener("input", (e) => {
+            e.target.classList.remove("input-error");
+            const errEl = document.getElementById(id.replace("sp-", "sp-error-"));
+            if (errEl) errEl.textContent = "";
+        });
+    });
 }
 
 // ── Store Selector ─────────────────────────────────────
@@ -1379,15 +1390,25 @@ function bindActionButtons() {
 
 function validateForm() {
     let valid = true;
-    const title = document.getElementById("sp-title").value.trim();
-    const titleError = document.getElementById("sp-error-title");
 
-    if (!title) {
-        titleError.textContent = "Title is required";
-        document.getElementById("sp-title").focus();
-        valid = false;
-    } else {
-        titleError.textContent = "";
+    const requiredFields = [
+        { id: "sp-title", errorId: "sp-error-title", label: "Title" },
+        { id: "sp-sku", errorId: "sp-error-sku", label: "SKU" },
+        { id: "sp-barcode", errorId: "sp-error-barcode", label: "Barcode" },
+    ];
+
+    for (const f of requiredFields) {
+        const el = document.getElementById(f.id);
+        const errEl = document.getElementById(f.errorId);
+        if (!el.value.trim()) {
+            errEl.textContent = `${f.label} is required`;
+            el.classList.add("input-error");
+            if (valid) el.focus();
+            valid = false;
+        } else {
+            errEl.textContent = "";
+            el.classList.remove("input-error");
+        }
     }
 
     if (!state.selectedStoreIds.length) {

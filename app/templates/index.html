@@ -1129,12 +1129,14 @@
                         </div>
                         <div class="flex-row" style="margin-bottom:var(--md-spacing-md);">
                             <div class="form-group">
-                                <label>SKU (Stock Keeping Unit)</label>
-                                <input type="text" class="form-input" id="sp-sku" placeholder="">
+                                <label>SKU (Stock Keeping Unit) <span class="required-mark">*</span></label>
+                                <input type="text" class="form-input" id="sp-sku" placeholder="" required>
+                                <div class="field-error" id="sp-error-sku"></div>
                             </div>
                             <div class="form-group">
-                                <label>Barcode (ISBN, UPC, GTIN, etc.)</label>
-                                <input type="text" class="form-input" id="sp-barcode" placeholder="">
+                                <label>Barcode (ISBN, UPC, GTIN, etc.) <span class="required-mark">*</span></label>
+                                <input type="text" class="form-input" id="sp-barcode" placeholder="" required>
+                                <div class="field-error" id="sp-error-barcode"></div>
                             </div>
                         </div>
                         <div class="form-group">

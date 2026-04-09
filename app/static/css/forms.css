@@ -109,6 +109,16 @@
     min-height: 16px;
 }
 
+.form-input.input-error,
+.form-select.input-error {
+    border-color: var(--md-error);
+    background: var(--md-error-light);
+}
+
+.form-input.input-error:focus {
+    box-shadow: 0 0 0 1px var(--md-error);
+}
+
 /* Field with validation icon */
 .input-with-status {
     position: relative;
