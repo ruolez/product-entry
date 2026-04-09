@@ -23,6 +23,8 @@ const state = {
     selectedCollections: [],
     quill: null,
     initialized: false,
+    templateMode: false,
+    templateProduct: null,
 };
 
 // ── Init ───────────────────────────────────────────────
@@ -54,6 +56,7 @@ async function initShopifyOnce() {
     bindCollectionsSearch();
     bindSeoSync();
     bindActionButtons();
+    initLookup();
 }
 
 // ── Store Selector ─────────────────────────────────────
@@ -1466,4 +1469,136 @@ function fillTestData() {
 
     document.getElementById("sp-error-title").textContent = "";
     showToast(`Test data filled — Product #${id}`, "success");
+}
+
+// ── Product Lookup ────────────────────────────────────
+function initLookup() {
+    const btn = document.getElementById("sp-lookup-btn");
+    const input = document.getElementById("sp-lookup-barcode");
+    const clearBtn = document.getElementById("sp-clear-template");
+
+    if (btn) btn.addEventListener("click", lookupByBarcode);
+    if (input) {
+        input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                lookupByBarcode();
+            }
+        });
+    }
+    if (clearBtn) clearBtn.addEventListener("click", clearLookupTemplate);
+}
+
+async function lookupByBarcode() {
+    const input = document.getElementById("sp-lookup-barcode");
+    const btn = document.getElementById("sp-lookup-btn");
+    const barcode = input.value.trim();
+
+    if (!barcode) {
+        showToast("Enter a barcode to search", "warning");
+        input.focus();
+        return;
+    }
+
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span> Searching...';
+
+    try {
+        const result = await api.post("/api/shopify/products/lookup", { barcode });
+
+        if (!result.found) {
+            showToast("No product found with this barcode", "warning");
+            return;
+        }
+
+        applyLookupTemplate(result, barcode);
+    } catch (err) {
+        showToast(`Lookup failed: ${err.message}`, "error");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+    }
+}
+
+function applyLookupTemplate(result, barcode) {
+    state.templateMode = true;
+    state.templateProduct = result;
+
+    const p = result.product;
+
+    // Show template banner
+    const banner = document.getElementById("sp-template-banner");
+    const storeList = result.found_in_stores.join(", ");
+    document.getElementById("sp-template-banner-text").textContent =
+        `Template: ${p.title} (barcode: ${barcode}) — Found in: ${storeList}`;
+    banner.classList.remove("hidden");
+
+    // Fill form fields
+    document.getElementById("sp-title").value = p.title || "";
+    if (state.quill && p.descriptionHtml) {
+        state.quill.root.innerHTML = p.descriptionHtml;
+        state.descriptionHtml = p.descriptionHtml;
+    }
+    document.getElementById("sp-vendor").value = p.vendor || "";
+    document.getElementById("sp-product-type").value = p.productType || "";
+    document.getElementById("sp-status").value = p.status || "DRAFT";
+
+    // Pricing
+    document.getElementById("sp-price").value = p.price || "";
+    document.getElementById("sp-compare-at-price").value = p.compareAtPrice || "";
+    document.getElementById("sp-cost").value = p.cost || "";
+    document.getElementById("sp-charge-tax").checked = p.taxable !== false;
+
+    // Shipping
+    if (p.weight) {
+        document.getElementById("sp-weight").value = p.weight;
+        document.getElementById("sp-weight-unit").value = p.weightUnit || "lb";
+        document.getElementById("sp-physical-product").checked = true;
+    }
+
+    // SEO
+    if (p.seo) {
+        document.getElementById("sp-seo-title").value = p.seo.title || "";
+        document.getElementById("sp-seo-description").value = p.seo.description || "";
+    }
+    document.getElementById("sp-seo-handle").value = "";
+    document.getElementById("sp-seo-handle")._userEdited = false;
+    document.getElementById("sp-template").value = p.templateSuffix || "";
+
+    // Tags
+    state.tags = Array.isArray(p.tags) ? [...p.tags] : [];
+    renderTags();
+
+    // Metafields
+    state.metafields = Array.isArray(p.metafields) ? p.metafields.map(mf => ({ ...mf })) : [];
+    renderMetafields();
+
+    // Clear identifiers — user fills new ones
+    document.getElementById("sp-sku").value = "";
+    document.getElementById("sp-barcode").value = "";
+
+    // Clear search input
+    document.getElementById("sp-lookup-barcode").value = "";
+
+    // Clear variants (template creates a simple product, user adds variants if needed)
+    state.options = [];
+    state.variants = [];
+    renderVariantOptions();
+
+    // Update SEO preview
+    updateSeoPreview();
+
+    document.getElementById("sp-error-title").textContent = "";
+    showToast(`Product loaded from ${result.source_store}`, "success");
+
+    // Focus title for editing
+    setTimeout(() => document.getElementById("sp-title")?.focus(), 100);
+}
+
+function clearLookupTemplate() {
+    state.templateMode = false;
+    state.templateProduct = null;
+    document.getElementById("sp-template-banner").classList.add("hidden");
+    clearForm();
 }

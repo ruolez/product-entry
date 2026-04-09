@@ -16,6 +16,7 @@ from services.shopify_service import (
     get_tags,
     get_store_data,
     push_to_stores,
+    lookup_product_by_barcode,
 )
 from services.shopify_image_service import (
     process_images_for_store,
@@ -146,6 +147,19 @@ def store_watermark_info(store_id):
         "position": store.get("watermark_position", "bottom-right"),
         "opacity": float(store.get("watermark_opacity", 0.30)),
     })
+
+
+@shopify_bp.route("/products/lookup", methods=["POST"])
+def lookup_product():
+    data = request.get_json()
+    barcode = (data.get("barcode") or "").strip()
+    if not barcode:
+        return jsonify({"error": "Barcode is required"}), 400
+    try:
+        result = lookup_product_by_barcode(barcode)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @shopify_bp.route("/upload-images", methods=["POST"])

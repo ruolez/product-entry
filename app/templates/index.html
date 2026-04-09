@@ -1085,6 +1085,30 @@
             <!-- ── LEFT COLUMN (Main form) ── -->
             <div class="shopify-main">
 
+                <!-- Product Lookup -->
+                <div class="shopify-section" id="sp-section-lookup">
+                    <div class="shopify-section-body" style="padding-top:var(--md-spacing-md);">
+                        <div class="form-group">
+                            <label>Product Lookup <span class="text-sm text-muted">(search by barcode across all Shopify stores)</span></label>
+                            <div style="display:flex;gap:var(--md-spacing-sm);">
+                                <input type="text" class="form-input" id="sp-lookup-barcode"
+                                       placeholder="Enter barcode to search..." autocomplete="off" style="flex:1;">
+                                <button class="btn btn-secondary" id="sp-lookup-btn" style="padding:6px 16px;font-size:0.8125rem;">
+                                    <span class="material-icons-round" style="font-size:16px;">search</span> Search
+                                </button>
+                            </div>
+                        </div>
+                        <div class="template-banner hidden" id="sp-template-banner" style="margin-top:var(--md-spacing-sm);">
+                            <span class="material-icons-round" style="font-size:16px;color:var(--md-primary);">content_copy</span>
+                            <span id="sp-template-banner-text"></span>
+                            <button class="btn btn-icon" id="sp-clear-template" title="Clear template"
+                                    style="margin-left:auto;padding:4px;">
+                                <span class="material-icons-round" style="font-size:16px;">close</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Title & Description -->
                 <div class="shopify-section" id="sp-section-title">
                     <div class="shopify-section-body" style="padding-top:var(--md-spacing-md);">

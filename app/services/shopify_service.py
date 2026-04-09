@@ -241,6 +241,135 @@ def get_tags(store_id):
     return data.get("productTags", {}).get("nodes", [])
 
 
+_BARCODE_LOOKUP_QUERY = """
+{
+  products(first: 5, query: "barcode:%s") {
+    nodes {
+      id
+      title
+      descriptionHtml
+      handle
+      vendor
+      productType
+      status
+      tags
+      templateSuffix
+      seo { title description }
+      metafields(first: 50) {
+        nodes { namespace key type value }
+      }
+      variants(first: 100) {
+        nodes {
+          id title sku barcode
+          price compareAtPrice
+          inventoryItem {
+            cost { amount }
+            tracked
+          }
+          taxable
+          inventoryPolicy
+          selectedOptions { name value }
+          weight
+          weightUnit
+        }
+      }
+    }
+  }
+}
+"""
+
+
+def lookup_product_by_barcode(barcode):
+    stores = get_all_shopify_stores(active_only=True)
+    if not stores:
+        return {"found": False, "error": "No active Shopify stores"}
+
+    query = _BARCODE_LOOKUP_QUERY % barcode
+    found_in_stores = []
+    product_data = None
+
+    for store in stores:
+        try:
+            data = execute_graphql(store["id"], query)
+            products = data.get("products", {}).get("nodes", [])
+
+            for product in products:
+                variants = product.get("variants", {}).get("nodes", [])
+                matched_variant = None
+                for v in variants:
+                    if v.get("barcode") == barcode:
+                        matched_variant = v
+                        break
+
+                if not matched_variant:
+                    continue
+
+                found_in_stores.append(store["name"])
+
+                if product_data is None:
+                    product_data = _normalize_lookup_result(product, matched_variant)
+                break
+
+        except Exception:
+            continue
+
+    if not product_data:
+        return {"found": False}
+
+    return {
+        "found": True,
+        "product": product_data,
+        "found_in_stores": found_in_stores,
+        "source_store": found_in_stores[0] if found_in_stores else None,
+    }
+
+
+def _normalize_lookup_result(product, variant):
+    result = {
+        "title": product.get("title", ""),
+        "descriptionHtml": product.get("descriptionHtml", ""),
+        "vendor": product.get("vendor", ""),
+        "productType": product.get("productType", ""),
+        "status": product.get("status", "DRAFT"),
+        "tags": product.get("tags", []),
+        "handle": product.get("handle", ""),
+        "templateSuffix": product.get("templateSuffix", ""),
+    }
+
+    seo = product.get("seo")
+    if seo:
+        result["seo"] = {
+            "title": seo.get("title", ""),
+            "description": seo.get("description", ""),
+        }
+
+    metafields_nodes = product.get("metafields", {}).get("nodes", [])
+    if metafields_nodes:
+        result["metafields"] = [
+            {
+                "namespace": mf.get("namespace", "custom"),
+                "key": mf.get("key", ""),
+                "type": mf.get("type", "single_line_text_field"),
+                "value": mf.get("value", ""),
+            }
+            for mf in metafields_nodes
+            if mf.get("key")
+        ]
+
+    if variant:
+        result["price"] = variant.get("price", "")
+        result["compareAtPrice"] = variant.get("compareAtPrice", "")
+        cost_data = variant.get("inventoryItem", {}).get("cost")
+        result["cost"] = cost_data.get("amount", "") if cost_data else ""
+        result["taxable"] = variant.get("taxable", True)
+        result["weight"] = variant.get("weight")
+        result["weightUnit"] = (variant.get("weightUnit") or "POUNDS").lower()
+        weight_map = {"pounds": "lb", "kilograms": "kg", "ounces": "oz", "grams": "g"}
+        result["weightUnit"] = weight_map.get(result["weightUnit"], result["weightUnit"])
+
+    return result
+
+
 def staged_uploads_create(store_id, files_info):
     query = """
     mutation stagedUploadsCreate($input: [StagedUploadInput!]!) {
