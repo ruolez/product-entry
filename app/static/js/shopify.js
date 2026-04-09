@@ -1654,7 +1654,7 @@ function updateSeoPreview() {
 // ── Action Buttons ─────────────────────────────────────
 function bindActionButtons() {
     document.getElementById("sp-btn-save").addEventListener("click", saveProduct);
-    document.getElementById("sp-btn-clear").addEventListener("click", clearForm);
+    document.getElementById("sp-btn-clear").addEventListener("click", clearLookupTemplate);
     document.getElementById("sp-btn-test-data").addEventListener("click", fillTestData);
 }
 
