@@ -322,10 +322,11 @@ def lookup_product_by_barcode(barcode):
         return {"found": False}
 
     # If any store has the product configured with variants, promote variant
-    # info onto first_product so the frontend enables variant mode globally.
+    # info onto a copy so the per-store entry stays untouched.
     if not first_product.get("isVariantProduct"):
         for product_data in per_store_products.values():
             if product_data.get("isVariantProduct"):
+                first_product = dict(first_product)
                 first_product["isVariantProduct"] = True
                 first_product["productOptions"] = product_data.get("productOptions", [])
                 first_product["existingVariants"] = product_data.get("existingVariants", [])

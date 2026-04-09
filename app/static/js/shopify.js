@@ -2455,9 +2455,14 @@ function applyLookupData(p, extraInfo, perStoreProducts) {
     }
 
     document.getElementById("sp-error-title").textContent = "";
-    showToast(isVariant ? "Variant product loaded — add a new variant" : "Product loaded as template", "success");
+    const activeStoreIsVariant = activeSnap?.isVariantProduct;
+    if (isVariant && !activeStoreIsVariant) {
+        showToast("Product loaded as template (variant in other stores)", "success");
+    } else {
+        showToast(activeStoreIsVariant ? "Variant product loaded — add a new variant" : "Product loaded as template", "success");
+    }
 
-    if (!isVariant) {
+    if (!activeStoreIsVariant) {
         setTimeout(() => document.getElementById("sp-title")?.focus(), 100);
     }
 }
