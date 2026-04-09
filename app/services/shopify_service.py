@@ -402,9 +402,26 @@ def search_products(query, limit=50):
     if not stores:
         return []
 
+    has_wildcard = "%" in query
     safe_query = query.replace('"', '\\"').replace("\\", "\\\\")
+
+    if has_wildcard:
+        # SQL-like: % becomes * for Shopify search
+        shopify_query = "title:" + safe_query.replace("%", "*")
+    else:
+        # Default: starts-with match
+        shopify_query = "title:" + safe_query + "*"
+
     per_store_limit = min(limit, 50)
-    gql = _SEARCH_QUERY % (per_store_limit, safe_query)
+    gql = _SEARCH_QUERY % (per_store_limit, shopify_query)
+
+    # Build a pattern for client-side filtering
+    if has_wildcard:
+        import re
+        pattern_str = re.escape(query.replace("%", "\x00")).replace(re.escape("\x00"), ".*")
+        title_pattern = re.compile("^" + pattern_str, re.IGNORECASE)
+    else:
+        title_pattern = None
 
     results = []
     seen_titles = set()
@@ -415,6 +432,15 @@ def search_products(query, limit=50):
             products = data.get("products", {}).get("nodes", [])
             for p in products:
                 title = p.get("title", "")
+
+                # Filter: starts-with (no wildcard) or pattern match (wildcard)
+                if title_pattern:
+                    if not title_pattern.match(title):
+                        continue
+                else:
+                    if not title.lower().startswith(query.lower()):
+                        continue
+
                 dedup_key = f"{title}|{p.get('vendor', '')}"
                 if dedup_key in seen_titles:
                     continue
@@ -436,13 +462,11 @@ def search_products(query, limit=50):
                     "sku": first_variant.get("sku", ""),
                     "barcode": barcodes[0] if barcodes else "",
                 })
-
-                if len(results) >= limit:
-                    return results
         except Exception:
             continue
 
-    return results
+    results.sort(key=lambda r: r["title"].lower())
+    return results[:limit]
 
 
 _PRODUCT_DETAIL_QUERY = """
