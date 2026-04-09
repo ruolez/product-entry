@@ -263,14 +263,13 @@ _BARCODE_LOOKUP_QUERY = """
           id title sku barcode
           price compareAtPrice
           inventoryItem {
-            cost { amount }
+            unitCost { amount }
             tracked
+            measurement { weight { unit value } }
           }
           taxable
           inventoryPolicy
           selectedOptions { name value }
-          weight
-          weightUnit
         }
       }
     }
@@ -359,13 +358,17 @@ def _normalize_lookup_result(product, variant):
     if variant:
         result["price"] = variant.get("price", "")
         result["compareAtPrice"] = variant.get("compareAtPrice", "")
-        cost_data = variant.get("inventoryItem", {}).get("cost")
-        result["cost"] = cost_data.get("amount", "") if cost_data else ""
+        inv_item = variant.get("inventoryItem", {})
+        unit_cost = inv_item.get("unitCost")
+        result["cost"] = unit_cost.get("amount", "") if unit_cost else ""
         result["taxable"] = variant.get("taxable", True)
-        result["weight"] = variant.get("weight")
-        result["weightUnit"] = (variant.get("weightUnit") or "POUNDS").lower()
-        weight_map = {"pounds": "lb", "kilograms": "kg", "ounces": "oz", "grams": "g"}
-        result["weightUnit"] = weight_map.get(result["weightUnit"], result["weightUnit"])
+        measurement = inv_item.get("measurement", {})
+        weight_data = measurement.get("weight")
+        if weight_data:
+            result["weight"] = weight_data.get("value")
+            raw_unit = (weight_data.get("unit") or "POUNDS").lower()
+            weight_map = {"pounds": "lb", "kilograms": "kg", "ounces": "oz", "grams": "g"}
+            result["weightUnit"] = weight_map.get(raw_unit, raw_unit)
 
     return result
 
@@ -490,14 +493,13 @@ query getProduct($id: ID!) {
         id title sku barcode
         price compareAtPrice
         inventoryItem {
-          cost { amount }
+          unitCost { amount }
           tracked
+          measurement { weight { unit value } }
         }
         taxable
         inventoryPolicy
         selectedOptions { name value }
-        weight
-        weightUnit
       }
     }
   }
