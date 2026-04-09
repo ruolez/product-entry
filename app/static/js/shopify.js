@@ -282,11 +282,13 @@ function captureFormState() {
 
     if (state.addVariantMode) {
         const prevSnap = state.perStoreProductData[state.activeStoreId];
-        result.isVariantProduct = true;
-        result.shopifyProductId = prevSnap?.shopifyProductId || "";
-        result.existingVariants = (prevSnap?.existingVariants || []).map(v => ({ ...v }));
-        result.productOptions = (prevSnap?.productOptions || []).map(o => ({ name: o.name, values: [...o.values] }));
-        result.newVariant = captureNewVariantForm();
+        if (prevSnap?.isVariantProduct) {
+            result.isVariantProduct = true;
+            result.shopifyProductId = prevSnap.shopifyProductId || "";
+            result.existingVariants = (prevSnap.existingVariants || []).map(v => ({ ...v }));
+            result.productOptions = (prevSnap.productOptions || []).map(o => ({ name: o.name, values: [...o.values] }));
+            result.newVariant = captureNewVariantForm();
+        }
     }
 
     return result;
@@ -344,6 +346,19 @@ function restoreFormState(snap) {
     } else {
         renderVariantOptions();
         setAddVariantFieldVisibility(false);
+    }
+
+    // Update banner text to reflect current store's mode
+    if (state.addVariantMode && state.templateProduct) {
+        const bannerTextEl = document.getElementById("sp-template-banner-text");
+        if (bannerTextEl) {
+            const title = state.templateProduct.title || "";
+            const prefix = storeIsVariant ? "Add variant to" : "Template";
+            let bannerText = `${prefix}: ${title}`;
+            const extraInfo = bannerTextEl._extraInfo;
+            if (extraInfo) bannerText += ` — ${extraInfo}`;
+            bannerTextEl.textContent = bannerText;
+        }
     }
 }
 
@@ -1745,11 +1760,11 @@ function validateForm() {
         state.perStoreProductData[state.activeStoreId] = captureFormState();
     }
 
-    // If any store is in add-variant mode, validate the variant form
-    const hasVariantStores = state.addVariantMode &&
-        state.selectedStoreIds.some(sid => state.perStoreProductData[sid]?.isVariantProduct);
+    // Only validate variant form when the active store is a variant store (form is visible)
+    const activeSnap = state.perStoreProductData[state.activeStoreId];
+    const activeIsVariant = state.addVariantMode && activeSnap?.isVariantProduct;
 
-    if (hasVariantStores) {
+    if (activeIsVariant) {
         // Validate variant option fields
         const unselected = state.productOptions.filter((_, i) => {
             const input = document.getElementById(`sp-new-variant-opt-${i}`);
@@ -1910,7 +1925,7 @@ async function saveProduct() {
             store_ids: targetStoreIds,
             per_store_product_data: perStoreProductData,
             image_ids: [...imageIds, ...variantImageIds],
-            image_mode: state.addVariantMode ? "shared" : state.imageMode,
+            image_mode: state.imageMode,
             per_store_image_ids: perStoreImageIds,
         });
 
@@ -2387,9 +2402,14 @@ function applyLookupData(p, extraInfo, perStoreProducts) {
 
     // Show template/variant banner
     const banner = document.getElementById("sp-template-banner");
-    let bannerText = isVariant ? `Add variant to: ${p.title}` : `Template: ${p.title}`;
+    const activeSnap0 = perStoreProducts?.[String(state.activeStoreId)];
+    const activeIsVariant = isVariant && activeSnap0?.isVariantProduct;
+    const prefix = activeIsVariant ? "Add variant to" : "Template";
+    let bannerText = `${prefix}: ${p.title}`;
     if (extraInfo) bannerText += ` — ${extraInfo}`;
-    document.getElementById("sp-template-banner-text").textContent = bannerText;
+    const bannerTextEl = document.getElementById("sp-template-banner-text");
+    bannerTextEl.textContent = bannerText;
+    bannerTextEl._extraInfo = extraInfo || "";
     banner.classList.remove("hidden");
 
     // Clear search inputs
