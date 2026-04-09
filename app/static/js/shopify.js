@@ -353,12 +353,17 @@ function buildProductDataFromSnapshot(snap, storeId) {
             title: snap.title || "",
         };
 
-        product.productOptions = (snap.productOptions || []).map(o => ({
-            name: o.name,
-            values: o.values.map(v => ({ name: v })),
-        }));
-
         const nv = snap.newVariant || captureNewVariantForm();
+
+        // Build productOptions, merging any new option values from the new variant
+        product.productOptions = (snap.productOptions || []).map(o => {
+            const newVal = nv.optionValues.find(ov => ov.optionName === o.name)?.name || "";
+            const allValues = [...o.values];
+            if (newVal && !allValues.includes(newVal)) {
+                allValues.push(newVal);
+            }
+            return { name: o.name, values: allValues.map(v => ({ name: v })) };
+        });
         product.variants = [{
             optionValues: nv.optionValues.filter(ov => ov.name),
             price: parseFloat(nv.price) || 0,
@@ -1296,16 +1301,19 @@ function renderAddVariantUI(snap) {
         </div>
     `;
 
-    // New variant form
+    // New variant form — text inputs with datalist for suggestions (allows new values)
     const optionSelectors = productOptions.map((opt, i) => {
         const savedVal = savedNew.optionValues?.[i]?.name || "";
+        const listId = `sp-new-variant-optlist-${i}`;
         return `
             <div class="form-group" style="flex:1; min-width:120px;">
-                <label>${escapeHtml(opt.name)}</label>
-                <select class="form-select" id="sp-new-variant-opt-${i}" data-option-index="${i}">
-                    <option value="">Select ${escapeHtml(opt.name)}...</option>
-                    ${opt.values.map(val => `<option value="${escapeHtml(val)}" ${val === savedVal ? "selected" : ""}>${escapeHtml(val)}</option>`).join("")}
-                </select>
+                <label>${escapeHtml(opt.name)} <span class="required-mark">*</span></label>
+                <input type="text" class="form-input" id="sp-new-variant-opt-${i}" data-option-index="${i}"
+                       list="${listId}" value="${escapeHtml(savedVal)}"
+                       placeholder="Select or type new ${escapeHtml(opt.name)}..." autocomplete="off">
+                <datalist id="${listId}">
+                    ${opt.values.map(val => `<option value="${escapeHtml(val)}">`).join("")}
+                </datalist>
             </div>
         `;
     }).join("");
@@ -1350,10 +1358,10 @@ function renderAddVariantUI(snap) {
         </div>
     `;
 
-    // Bind change events for duplicate detection
+    // Bind input events for duplicate detection
     productOptions.forEach((_, i) => {
-        const select = document.getElementById(`sp-new-variant-opt-${i}`);
-        if (select) select.addEventListener("change", checkDuplicateVariant);
+        const input = document.getElementById(`sp-new-variant-opt-${i}`);
+        if (input) input.addEventListener("input", checkDuplicateVariant);
     });
 
     // Expand variant section
@@ -1366,8 +1374,8 @@ function checkDuplicateVariant() {
     if (!warning) return false;
 
     const selectedValues = state.productOptions.map((_, i) => {
-        const select = document.getElementById(`sp-new-variant-opt-${i}`);
-        return select?.value || "";
+        const input = document.getElementById(`sp-new-variant-opt-${i}`);
+        return input?.value?.trim() || "";
     });
 
     if (selectedValues.some(v => !v)) {
@@ -1389,8 +1397,8 @@ function checkDuplicateVariant() {
 
 function captureNewVariantForm() {
     const optionValues = state.productOptions.map((opt, i) => {
-        const select = document.getElementById(`sp-new-variant-opt-${i}`);
-        return { optionName: opt.name, name: select?.value || "" };
+        const input = document.getElementById(`sp-new-variant-opt-${i}`);
+        return { optionName: opt.name, name: input?.value?.trim() || "" };
     });
     return {
         optionValues,
@@ -1665,14 +1673,14 @@ function validateForm() {
 
     // Add-variant mode validation
     if (state.addVariantMode) {
-        // Validate all option dropdowns have a selection
+        // Validate all option fields have a value
         const unselected = state.productOptions.filter((_, i) => {
-            const select = document.getElementById(`sp-new-variant-opt-${i}`);
-            return !select?.value;
+            const input = document.getElementById(`sp-new-variant-opt-${i}`);
+            return !input?.value?.trim();
         });
         if (unselected.length) {
-            showToast("Select a value for all variant options", "warning");
-            const firstEmpty = state.productOptions.findIndex((_, i) => !document.getElementById(`sp-new-variant-opt-${i}`)?.value);
+            showToast("Enter a value for all variant options", "warning");
+            const firstEmpty = state.productOptions.findIndex((_, i) => !document.getElementById(`sp-new-variant-opt-${i}`)?.value?.trim());
             document.getElementById(`sp-new-variant-opt-${firstEmpty}`)?.focus();
             return false;
         }
