@@ -308,7 +308,8 @@ def lookup_product_by_barcode(barcode):
                     continue
 
                 found_in_stores.append(store["name"])
-                normalized = _normalize_lookup_result(product, matched_variant)
+                all_variants = product.get("variants", {}).get("nodes", [])
+                normalized = _normalize_lookup_result(product, matched_variant, all_variants)
                 per_store_products[str(store["id"])] = normalized
                 if first_product is None:
                     first_product = normalized
@@ -329,7 +330,32 @@ def lookup_product_by_barcode(barcode):
     }
 
 
-def _normalize_lookup_result(product, variant):
+def _is_variant_product(variants):
+    if len(variants) > 1:
+        return True
+    if len(variants) == 1:
+        for opt in variants[0].get("selectedOptions", []):
+            if opt.get("value") != "Default Title":
+                return True
+    return False
+
+
+def _extract_product_options(variants):
+    options = {}
+    for v in variants:
+        for opt in v.get("selectedOptions", []):
+            name = opt.get("name", "")
+            value = opt.get("value", "")
+            if not name:
+                continue
+            if name not in options:
+                options[name] = []
+            if value not in options[name]:
+                options[name].append(value)
+    return [{"name": name, "values": vals} for name, vals in options.items()]
+
+
+def _normalize_lookup_result(product, variant, all_variants=None):
     result = {
         "title": product.get("title", ""),
         "descriptionHtml": product.get("descriptionHtml", ""),
@@ -383,6 +409,25 @@ def _normalize_lookup_result(product, variant):
             raw_unit = (weight_data.get("unit") or "POUNDS").lower()
             weight_map = {"pounds": "lb", "kilograms": "kg", "ounces": "oz", "grams": "g"}
             result["weightUnit"] = weight_map.get(raw_unit, raw_unit)
+
+    if all_variants and _is_variant_product(all_variants):
+        result["isVariantProduct"] = True
+        result["shopifyProductId"] = product.get("id", "")
+        result["productOptions"] = _extract_product_options(all_variants)
+        result["existingVariants"] = []
+        for v in all_variants:
+            inv_item = v.get("inventoryItem", {})
+            unit_cost = inv_item.get("unitCost")
+            result["existingVariants"].append({
+                "id": v.get("id", ""),
+                "title": v.get("title", ""),
+                "sku": v.get("sku", ""),
+                "barcode": v.get("barcode", ""),
+                "price": v.get("price", ""),
+                "compareAtPrice": v.get("compareAtPrice", ""),
+                "cost": unit_cost.get("amount", "") if unit_cost else "",
+                "selectedOptions": v.get("selectedOptions", []),
+            })
 
     return result
 
@@ -533,7 +578,7 @@ def get_product_detail(store_id, product_id):
     variants = product.get("variants", {}).get("nodes", [])
     first_variant = variants[0] if variants else {}
 
-    return _normalize_lookup_result(product, first_variant)
+    return _normalize_lookup_result(product, first_variant, variants)
 
 
 def staged_uploads_create(store_id, files_info):
@@ -784,6 +829,9 @@ def push_to_stores_per_store(store_ids, per_store_product_data, per_store_image_
 def _build_product_set_input(product_data, image_resource_urls=None):
     product = product_data.get("product", {})
     inp = {"title": product.get("title", "")}
+
+    if product.get("id"):
+        inp["id"] = product["id"]
 
     for key in [
         "descriptionHtml", "handle", "vendor", "productType",

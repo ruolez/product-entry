@@ -27,6 +27,10 @@ const state = {
     templateProduct: null,
     perStoreProductData: {},
     activeStoreId: null,
+    addVariantMode: false,
+    existingVariants: [],
+    productOptions: [],
+    perStoreShopifyIds: {},
 };
 
 // ── Init ───────────────────────────────────────────────
@@ -239,7 +243,7 @@ function updateStoreLabel() {
 }
 
 function captureFormState() {
-    return {
+    const result = {
         title: document.getElementById("sp-title").value,
         descriptionHtml: state.descriptionHtml || "",
         vendor: document.getElementById("sp-vendor").value,
@@ -270,6 +274,17 @@ function captureFormState() {
         variants: state.variants.map(v => ({ ...v })),
         selectedCollections: state.selectedCollections.map(c => ({ ...c })),
     };
+
+    if (state.addVariantMode) {
+        const prevSnap = state.perStoreProductData[state.activeStoreId];
+        result.isVariantProduct = true;
+        result.shopifyProductId = prevSnap?.shopifyProductId || "";
+        result.existingVariants = (prevSnap?.existingVariants || []).map(v => ({ ...v }));
+        result.productOptions = (prevSnap?.productOptions || []).map(o => ({ name: o.name, values: [...o.values] }));
+        result.newVariant = captureNewVariantForm();
+    }
+
+    return result;
 }
 
 function restoreFormState(snap) {
@@ -309,14 +324,69 @@ function restoreFormState(snap) {
 
     renderTags();
     renderMetafields();
-    renderVariantOptions();
     renderCollectionChips();
     updateSeoPreview();
 
     document.getElementById("sp-error-title").textContent = "";
+
+    if (state.addVariantMode && snap.isVariantProduct) {
+        renderAddVariantUI(snap);
+        setAddVariantFieldVisibility(true);
+    } else {
+        renderVariantOptions();
+        setAddVariantFieldVisibility(false);
+    }
 }
 
 function buildProductDataFromSnapshot(snap, storeId) {
+    const trackInventory = snap.trackInventory !== false;
+    const taxable = snap.chargeTax !== false;
+    const inventoryPolicy = snap.continueSelling ? "CONTINUE" : "DENY";
+
+    // Add-variant mode: update existing product with new variant only
+    if (state.addVariantMode && snap.isVariantProduct) {
+        const shopifyId = state.perStoreShopifyIds[storeId];
+        if (!shopifyId) return null;
+
+        const product = {
+            id: shopifyId,
+            title: snap.title || "",
+        };
+
+        product.productOptions = (snap.productOptions || []).map(o => ({
+            name: o.name,
+            values: o.values.map(v => ({ name: v })),
+        }));
+
+        const nv = snap.newVariant || captureNewVariantForm();
+        product.variants = [{
+            optionValues: nv.optionValues.filter(ov => ov.name),
+            price: parseFloat(nv.price) || 0,
+            compareAtPrice: nv.compareAtPrice ? parseFloat(nv.compareAtPrice) : undefined,
+            inventoryItem: { tracked: trackInventory, cost: nv.cost ? parseFloat(nv.cost) : undefined },
+            inventoryPolicy,
+            sku: nv.sku || undefined,
+            barcode: nv.barcode || undefined,
+            taxable,
+        }];
+
+        const result = { product };
+
+        // Inventory for the new variant
+        const sid = String(storeId);
+        const locationQuantities = {};
+        document.querySelectorAll(`#sp-inventory-locations input[data-store="${sid}"]`).forEach(input => {
+            const qty = parseInt(input.value) || 0;
+            if (qty > 0) locationQuantities[input.dataset.location] = qty;
+        });
+        if (Object.keys(locationQuantities).length) {
+            result.inventory = { location_quantities: locationQuantities };
+        }
+
+        return result;
+    }
+
+    // Standard create-product mode
     const product = {
         title: snap.title || "",
         descriptionHtml: snap.descriptionHtml || "",
@@ -347,10 +417,6 @@ function buildProductDataFromSnapshot(snap, storeId) {
     if (snap.selectedCollections && snap.selectedCollections.length) {
         product.collectionsToJoin = snap.selectedCollections.map(c => c.id);
     }
-
-    const trackInventory = snap.trackInventory !== false;
-    const taxable = snap.chargeTax !== false;
-    const inventoryPolicy = snap.continueSelling ? "CONTINUE" : "DENY";
 
     if (snap.options && snap.options.length && snap.variants && snap.variants.length) {
         product.productOptions = snap.options
@@ -1187,6 +1253,196 @@ function renderVariantTable() {
     });
 }
 
+// ── Add Variant Mode ──────────────────────────────────
+function renderAddVariantUI(snap) {
+    const optionsContainer = document.getElementById("sp-variant-options");
+    const tableContainer = document.getElementById("sp-variant-table-container");
+    const addBtn = document.getElementById("sp-add-option");
+    addBtn.classList.add("hidden");
+
+    const existingVariants = snap?.existingVariants || state.existingVariants || [];
+    const productOptions = snap?.productOptions || state.productOptions || [];
+    const savedNew = snap?.newVariant || {};
+
+    // Existing variants read-only table
+    tableContainer.classList.remove("hidden");
+    tableContainer.innerHTML = `
+        <div style="margin-bottom:var(--md-spacing-md);">
+            <h4 style="margin:0 0 var(--md-spacing-sm) 0; font-size:0.875rem; font-weight:600;">
+                Existing Variants (${existingVariants.length})
+            </h4>
+            <table class="variant-table">
+                <thead>
+                    <tr>
+                        <th>Variant</th>
+                        <th style="width:100px;">SKU</th>
+                        <th style="width:110px;">Barcode</th>
+                        <th style="width:80px;">Price</th>
+                        <th style="width:80px;">Cost</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${existingVariants.map(v => `
+                        <tr style="background:var(--md-surface-variant, #f1f3f4);">
+                            <td style="font-weight:500;">${escapeHtml(v.title || "—")}</td>
+                            <td class="text-sm">${escapeHtml(v.sku || "—")}</td>
+                            <td class="text-sm">${escapeHtml(v.barcode || "—")}</td>
+                            <td class="text-sm">$${parseFloat(v.price || 0).toFixed(2)}</td>
+                            <td class="text-sm">$${parseFloat(v.cost || 0).toFixed(2)}</td>
+                        </tr>
+                    `).join("")}
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    // New variant form
+    const optionSelectors = productOptions.map((opt, i) => {
+        const savedVal = savedNew.optionValues?.[i]?.name || "";
+        return `
+            <div class="form-group" style="flex:1; min-width:120px;">
+                <label>${escapeHtml(opt.name)}</label>
+                <select class="form-select" id="sp-new-variant-opt-${i}" data-option-index="${i}">
+                    <option value="">Select ${escapeHtml(opt.name)}...</option>
+                    ${opt.values.map(val => `<option value="${escapeHtml(val)}" ${val === savedVal ? "selected" : ""}>${escapeHtml(val)}</option>`).join("")}
+                </select>
+            </div>
+        `;
+    }).join("");
+
+    optionsContainer.innerHTML = `
+        <div class="add-variant-form" style="border:2px solid var(--md-primary); border-radius:var(--md-radius-md, 8px); padding:var(--md-spacing-md); margin-top:var(--md-spacing-sm);">
+            <h4 style="margin:0 0 var(--md-spacing-md) 0; font-size:0.875rem; font-weight:600; color:var(--md-primary);">
+                <span class="material-icons-round" style="font-size:18px; vertical-align:middle; margin-right:4px;">add_circle</span>
+                New Variant
+            </h4>
+            <div style="display:flex; gap:var(--md-spacing-md); flex-wrap:wrap; margin-bottom:var(--md-spacing-md);">
+                ${optionSelectors}
+            </div>
+            <div id="sp-variant-duplicate-warning" class="hidden" style="color:var(--md-error); font-size:0.8125rem; margin-bottom:var(--md-spacing-sm); font-weight:500;">
+                <span class="material-icons-round" style="font-size:16px; vertical-align:middle;">warning</span>
+                This variant combination already exists
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:var(--md-spacing-md);">
+                <div class="form-group">
+                    <label>Price <span class="required-mark">*</span></label>
+                    <input type="number" step="0.01" class="form-input" id="sp-new-variant-price" value="${savedNew.price ?? ""}" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label>Compare-at price</label>
+                    <input type="number" step="0.01" class="form-input" id="sp-new-variant-compare" value="${savedNew.compareAtPrice ?? ""}" placeholder="">
+                </div>
+                <div class="form-group">
+                    <label>Cost</label>
+                    <input type="number" step="0.01" class="form-input" id="sp-new-variant-cost" value="${savedNew.cost ?? ""}" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label>SKU <span class="required-mark">*</span></label>
+                    <input type="text" class="form-input" id="sp-new-variant-sku" value="${escapeHtml(savedNew.sku ?? "")}" placeholder="">
+                    <div class="field-error" id="sp-error-new-variant-sku"></div>
+                </div>
+                <div class="form-group">
+                    <label>Barcode <span class="required-mark">*</span></label>
+                    <input type="text" class="form-input" id="sp-new-variant-barcode" value="${escapeHtml(savedNew.barcode ?? "")}" placeholder="">
+                    <div class="field-error" id="sp-error-new-variant-barcode"></div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Bind change events for duplicate detection
+    productOptions.forEach((_, i) => {
+        const select = document.getElementById(`sp-new-variant-opt-${i}`);
+        if (select) select.addEventListener("change", checkDuplicateVariant);
+    });
+
+    // Expand variant section
+    const variantSection = document.getElementById("sp-section-variants");
+    if (variantSection) variantSection.classList.remove("collapsed");
+}
+
+function checkDuplicateVariant() {
+    const warning = document.getElementById("sp-variant-duplicate-warning");
+    if (!warning) return false;
+
+    const selectedValues = state.productOptions.map((_, i) => {
+        const select = document.getElementById(`sp-new-variant-opt-${i}`);
+        return select?.value || "";
+    });
+
+    if (selectedValues.some(v => !v)) {
+        warning.classList.add("hidden");
+        return false;
+    }
+
+    const isDuplicate = state.existingVariants.some(ev => {
+        const opts = ev.selectedOptions || [];
+        return state.productOptions.every((po, i) => {
+            const match = opts.find(o => o.name === po.name);
+            return match && match.value === selectedValues[i];
+        });
+    });
+
+    warning.classList.toggle("hidden", !isDuplicate);
+    return isDuplicate;
+}
+
+function captureNewVariantForm() {
+    const optionValues = state.productOptions.map((opt, i) => {
+        const select = document.getElementById(`sp-new-variant-opt-${i}`);
+        return { optionName: opt.name, name: select?.value || "" };
+    });
+    return {
+        optionValues,
+        price: document.getElementById("sp-new-variant-price")?.value || "",
+        compareAtPrice: document.getElementById("sp-new-variant-compare")?.value || "",
+        cost: document.getElementById("sp-new-variant-cost")?.value || "",
+        sku: document.getElementById("sp-new-variant-sku")?.value || "",
+        barcode: document.getElementById("sp-new-variant-barcode")?.value || "",
+    };
+}
+
+function setAddVariantFieldVisibility(isVariantMode) {
+    // Product-level SKU/Barcode row
+    const skuGroup = document.getElementById("sp-sku")?.closest(".flex-row");
+    if (skuGroup) skuGroup.classList.toggle("hidden", isVariantMode);
+
+    // Product-level pricing section
+    const priceSection = document.getElementById("sp-section-pricing");
+    if (priceSection) priceSection.classList.toggle("hidden", isVariantMode);
+
+    // Make product fields read-only in variant mode
+    const readOnlyFields = ["sp-title", "sp-vendor", "sp-product-type"];
+    readOnlyFields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.readOnly = isVariantMode;
+            el.style.opacity = isVariantMode ? "0.7" : "";
+            el.style.pointerEvents = isVariantMode ? "none" : "";
+        }
+    });
+
+    // Description editor
+    if (state.quill) {
+        state.quill.enable(!isVariantMode);
+        if (isVariantMode) {
+            state.quill.root.style.opacity = "0.7";
+        } else {
+            state.quill.root.style.opacity = "";
+        }
+    }
+
+    // Save button label
+    const saveBtn = document.getElementById("sp-btn-save");
+    if (saveBtn) {
+        const icon = saveBtn.querySelector(".material-icons-round");
+        const iconHtml = icon ? icon.outerHTML : "";
+        saveBtn.innerHTML = isVariantMode
+            ? `${iconHtml} Add Variant to Stores`
+            : `${iconHtml} Save to Stores`;
+    }
+}
+
 // ── Metafields ─────────────────────────────────────────
 function bindMetafieldEvents() {
     document.getElementById("sp-add-metafield").addEventListener("click", () => {
@@ -1401,7 +1657,58 @@ function validateForm() {
         state.perStoreProductData[state.activeStoreId] = captureFormState();
     }
 
-    // Validate ALL stores' data
+    // Add-variant mode validation
+    if (state.addVariantMode) {
+        // Validate all option dropdowns have a selection
+        const unselected = state.productOptions.filter((_, i) => {
+            const select = document.getElementById(`sp-new-variant-opt-${i}`);
+            return !select?.value;
+        });
+        if (unselected.length) {
+            showToast("Select a value for all variant options", "warning");
+            const firstEmpty = state.productOptions.findIndex((_, i) => !document.getElementById(`sp-new-variant-opt-${i}`)?.value);
+            document.getElementById(`sp-new-variant-opt-${firstEmpty}`)?.focus();
+            return false;
+        }
+
+        // Check duplicate combination
+        if (checkDuplicateVariant()) {
+            showToast("This variant combination already exists", "warning");
+            return false;
+        }
+
+        // Validate new variant required fields
+        const newSku = document.getElementById("sp-new-variant-sku")?.value?.trim();
+        const newBarcode = document.getElementById("sp-new-variant-barcode")?.value?.trim();
+        const newPrice = document.getElementById("sp-new-variant-price")?.value?.trim();
+        const errors = [];
+        if (!newPrice) errors.push("Price");
+        if (!newSku) {
+            errors.push("SKU");
+            const errEl = document.getElementById("sp-error-new-variant-sku");
+            if (errEl) errEl.textContent = "SKU is required";
+        }
+        if (!newBarcode) {
+            errors.push("Barcode");
+            const errEl = document.getElementById("sp-error-new-variant-barcode");
+            if (errEl) errEl.textContent = "Barcode is required";
+        }
+        if (errors.length) {
+            showToast(`Missing required variant fields: ${errors.join(", ")}`, "warning");
+            return false;
+        }
+
+        // Check that at least one store has the product
+        const storesWithProduct = state.selectedStoreIds.filter(sid => state.perStoreShopifyIds[sid]);
+        if (!storesWithProduct.length) {
+            showToast("Product not found in any selected store", "warning");
+            return false;
+        }
+
+        return true;
+    }
+
+    // Standard (non-variant) validation
     const missingStores = [];
     for (const sid of state.selectedStoreIds) {
         const snap = state.perStoreProductData[sid];
@@ -1417,13 +1724,11 @@ function validateForm() {
     }
 
     if (missingStores.length) {
-        // Switch to the first store with errors and highlight
         const first = missingStores[0];
         if (first.sid !== state.activeStoreId) {
             switchStore(first.sid);
         }
 
-        // Highlight errors on the visible form
         const requiredFields = [
             { id: "sp-title", errorId: "sp-error-title", label: "Title" },
             { id: "sp-sku", errorId: "sp-error-sku", label: "SKU" },
@@ -1443,7 +1748,6 @@ function validateForm() {
             }
         }
 
-        // Show which stores have issues
         if (missingStores.length > 1) {
             const names = missingStores.map(s => s.storeName).join(", ");
             showToast(`Missing required fields on: ${names}`, "warning", 8000);
@@ -1493,7 +1797,13 @@ async function saveProduct() {
             }
         }
 
-        saveBtn.innerHTML = `<span class="spinner" style="width:18px;height:18px;border-width:2px;"></span> Saving to ${state.selectedStoreIds.length} store${state.selectedStoreIds.length > 1 ? "s" : ""}...`;
+        // In add-variant mode, only target stores that have the product
+        const targetStoreIds = state.addVariantMode
+            ? state.selectedStoreIds.filter(sid => state.perStoreShopifyIds[sid])
+            : state.selectedStoreIds;
+
+        const actionLabel = state.addVariantMode ? "Adding variant" : "Saving";
+        saveBtn.innerHTML = `<span class="spinner" style="width:18px;height:18px;border-width:2px;"></span> ${actionLabel} to ${targetStoreIds.length} store${targetStoreIds.length > 1 ? "s" : ""}...`;
 
         // Capture current active store's form
         if (state.activeStoreId) {
@@ -1502,23 +1812,27 @@ async function saveProduct() {
 
         // Build per-store product data
         const perStoreProductData = {};
-        for (const sid of state.selectedStoreIds) {
+        for (const sid of targetStoreIds) {
             const snap = state.perStoreProductData[sid];
             if (snap) {
-                perStoreProductData[sid] = buildProductDataFromSnapshot(snap, sid);
+                const data = buildProductDataFromSnapshot(snap, sid);
+                if (data) perStoreProductData[sid] = data;
             }
         }
 
         const result = await api.post("/api/shopify/products", {
-            store_ids: state.selectedStoreIds,
+            store_ids: targetStoreIds,
             per_store_product_data: perStoreProductData,
             image_ids: imageIds,
-            image_mode: state.imageMode,
+            image_mode: state.addVariantMode ? "shared" : state.imageMode,
             per_store_image_ids: perStoreImageIds,
         });
 
         if (result.stores_succeeded?.length) {
-            showToast(`Product created on: ${result.stores_succeeded.join(", ")}`, "success", 8000);
+            const successMsg = state.addVariantMode
+                ? `Variant added on: ${result.stores_succeeded.join(", ")}`
+                : `Product created on: ${result.stores_succeeded.join(", ")}`;
+            showToast(successMsg, "success", 8000);
         }
         if (result.stores_failed?.length) {
             for (const name of result.stores_failed) {
@@ -1696,7 +2010,12 @@ function clearForm() {
     state.metafields = [];
     state.tags = [];
     state.selectedCollections = [];
+    state.addVariantMode = false;
+    state.existingVariants = [];
+    state.productOptions = [];
+    state.perStoreShopifyIds = {};
 
+    setAddVariantFieldVisibility(false);
     renderVariantOptions();
     renderMetafields();
     renderTags();
@@ -1962,9 +2281,28 @@ function applyLookupData(p, extraInfo, perStoreProducts) {
     state.templateMode = true;
     state.templateProduct = p;
 
-    // Show template banner
+    const isVariant = p.isVariantProduct === true;
+    state.addVariantMode = isVariant;
+
+    if (isVariant) {
+        state.productOptions = (p.productOptions || []).map(o => ({ name: o.name, values: [...o.values] }));
+        state.existingVariants = (p.existingVariants || []).map(v => ({ ...v }));
+        state.perStoreShopifyIds = {};
+        for (const sid of state.selectedStoreIds) {
+            const storeProduct = perStoreProducts?.[String(sid)];
+            if (storeProduct?.shopifyProductId) {
+                state.perStoreShopifyIds[sid] = storeProduct.shopifyProductId;
+            }
+        }
+    } else {
+        state.productOptions = [];
+        state.existingVariants = [];
+        state.perStoreShopifyIds = {};
+    }
+
+    // Show template/variant banner
     const banner = document.getElementById("sp-template-banner");
-    let bannerText = `Template: ${p.title}`;
+    let bannerText = isVariant ? `Add variant to: ${p.title}` : `Template: ${p.title}`;
     if (extraInfo) bannerText += ` — ${extraInfo}`;
     document.getElementById("sp-template-banner-text").textContent = bannerText;
     banner.classList.remove("hidden");
@@ -1988,13 +2326,15 @@ function applyLookupData(p, extraInfo, perStoreProducts) {
     }
 
     document.getElementById("sp-error-title").textContent = "";
-    showToast("Product loaded as template", "success");
+    showToast(isVariant ? "Variant product loaded — add a new variant" : "Product loaded as template", "success");
 
-    setTimeout(() => document.getElementById("sp-title")?.focus(), 100);
+    if (!isVariant) {
+        setTimeout(() => document.getElementById("sp-title")?.focus(), 100);
+    }
 }
 
 function productToSnapshot(p) {
-    return {
+    const snap = {
         title: p.title || "",
         descriptionHtml: p.descriptionHtml || "",
         vendor: p.vendor || "",
@@ -2025,6 +2365,15 @@ function productToSnapshot(p) {
         variants: [],
         selectedCollections: Array.isArray(p.collections) ? p.collections.map(c => ({ ...c })) : [],
     };
+
+    if (p.isVariantProduct) {
+        snap.isVariantProduct = true;
+        snap.shopifyProductId = p.shopifyProductId || "";
+        snap.existingVariants = (p.existingVariants || []).map(v => ({ ...v }));
+        snap.productOptions = (p.productOptions || []).map(o => ({ name: o.name, values: [...o.values] }));
+    }
+
+    return snap;
 }
 
 function clearLookupTemplate() {
