@@ -139,7 +139,6 @@ async function onStoreSelectionChange() {
     for (const sid of state.selectedStoreIds) {
         if (!state.perStoreProductData[sid]) {
             state.perStoreProductData[sid] = captureFormState();
-            console.log(`[Shopify] Initialized store ${sid} with:`, state.perStoreProductData[sid].title);
         }
     }
     // Remove data for deselected stores
@@ -206,20 +205,14 @@ function switchStore(newStoreId) {
 
     // Save current form to current store's data
     if (state.activeStoreId) {
-        const saved = captureFormState();
-        state.perStoreProductData[state.activeStoreId] = saved;
-        console.log(`[Shopify] Saved store ${state.activeStoreId}:`, saved.title, saved.price);
+        state.perStoreProductData[state.activeStoreId] = captureFormState();
     }
 
     state.activeStoreId = newStoreId;
 
     // Restore new store's form data
-    const snap = state.perStoreProductData[newStoreId];
-    if (snap) {
-        console.log(`[Shopify] Restoring store ${newStoreId}:`, snap.title, snap.price);
-        restoreFormState(snap);
-    } else {
-        console.log(`[Shopify] No data for store ${newStoreId}`);
+    if (state.perStoreProductData[newStoreId]) {
+        restoreFormState(state.perStoreProductData[newStoreId]);
     }
 
     renderStoreSelector();
@@ -269,10 +262,7 @@ function captureFormState() {
 }
 
 function restoreFormState(snap) {
-    const titleBefore = document.getElementById("sp-title").value;
-    console.log("[Shopify] restoreFormState called with:", JSON.stringify({title: snap.title, price: snap.price, vendor: snap.vendor}));
     document.getElementById("sp-title").value = snap.title || "";
-    console.log(`[Shopify] Title: "${titleBefore}" → "${document.getElementById("sp-title").value}"`);
     if (state.quill) {
         state.quill.root.innerHTML = snap.descriptionHtml || "";
         state.descriptionHtml = snap.descriptionHtml || "";
@@ -1784,7 +1774,7 @@ function initLookup() {
 
                 activeIndex = -1;
                 dropdown.innerHTML = results.map((p, i) => `
-                    <div class="autocomplete-item" data-index="${i}" data-store-id="${p.store_id}" data-product-id="${p.product_id}">
+                    <div class="autocomplete-item" data-index="${i}" data-store-id="${p.store_id}" data-product-id="${p.product_id}" data-barcode="${escapeHtml(p.barcode || "")}">
                         <span class="ac-subcat">${spHighlightMatch(escapeHtml(p.title), query)}</span>
                         <span class="ac-cat">
                             ${p.barcode ? escapeHtml(p.barcode) + " &bull; " : ""}${p.vendor ? escapeHtml(p.vendor) + " &bull; " : ""}$${parseFloat(p.price || 0).toFixed(2)}
@@ -1796,7 +1786,7 @@ function initLookup() {
 
                 dropdown.querySelectorAll(".autocomplete-item[data-product-id]").forEach(item => {
                     item.addEventListener("click", () => {
-                        selectLookupProduct(parseInt(item.dataset.storeId), item.dataset.productId);
+                        selectLookupProduct(parseInt(item.dataset.storeId), item.dataset.productId, item.dataset.barcode);
                     });
                 });
             } catch {
@@ -1822,6 +1812,7 @@ function initLookup() {
                     selectLookupProduct(
                         parseInt(items[activeIndex].dataset.storeId),
                         items[activeIndex].dataset.productId,
+                        items[activeIndex].dataset.barcode,
                     );
                 }
             } else if (e.key === "Escape") {
@@ -1852,11 +1843,24 @@ function spUpdateActiveItem(items, index) {
     if (items[index]) items[index].scrollIntoView({ block: "nearest" });
 }
 
-async function selectLookupProduct(storeId, productId) {
+async function selectLookupProduct(storeId, productId, barcode) {
     document.getElementById("sp-lookup-dropdown").classList.add("hidden");
     document.getElementById("sp-lookup-title").value = "";
 
     try {
+        // If barcode available, do a full per-store lookup so each store gets its own data
+        if (barcode) {
+            const result = await api.post("/api/shopify/products/lookup", { barcode });
+            if (result.found) {
+                applyLookupData(
+                    result.product,
+                    `Found in: ${result.found_in_stores.join(", ")}`,
+                    result.per_store_products,
+                );
+                return;
+            }
+        }
+        // Fallback: fetch from the single store that had it
         const product = await api.get(`/api/shopify/products/detail/${storeId}/${encodeURIComponent(productId)}`);
         applyLookupData(product, null);
     } catch (err) {
