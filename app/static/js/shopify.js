@@ -393,7 +393,11 @@ function buildProductDataFromSnapshot(snap, storeId) {
                 barcode: nv.barcode || undefined,
                 taxable,
             }
-        ];
+        ].sort((a, b) => {
+            const aKey = (a.optionValues || []).map(ov => ov.name).join("/");
+            const bKey = (b.optionValues || []).map(ov => ov.name).join("/");
+            return aKey.localeCompare(bKey);
+        });
 
         const result = { product };
 

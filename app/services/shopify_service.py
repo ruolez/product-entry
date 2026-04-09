@@ -243,7 +243,7 @@ def get_tags(store_id):
 
 _BARCODE_LOOKUP_QUERY = """
 {
-  products(first: 5, query: "barcode:%s") {
+  products(first: 5, query: "barcode:%s status:active") {
     nodes {
       id
       title
@@ -469,10 +469,10 @@ def search_products(query, limit=50):
 
     if has_wildcard:
         # SQL-like: % becomes * for Shopify search
-        shopify_query = "title:" + safe_query.replace("%", "*")
+        shopify_query = "title:" + safe_query.replace("%", "*") + " status:active"
     else:
         # Default: starts-with match
-        shopify_query = "title:" + safe_query + "*"
+        shopify_query = "title:" + safe_query + "* status:active"
 
     per_store_limit = min(limit, 50)
     gql = _SEARCH_QUERY % (per_store_limit, shopify_query)
