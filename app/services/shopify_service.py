@@ -321,6 +321,17 @@ def lookup_product_by_barcode(barcode):
     if not first_product:
         return {"found": False}
 
+    # If any store has the product configured with variants, promote variant
+    # info onto first_product so the frontend enables variant mode globally.
+    if not first_product.get("isVariantProduct"):
+        for product_data in per_store_products.values():
+            if product_data.get("isVariantProduct"):
+                first_product["isVariantProduct"] = True
+                first_product["productOptions"] = product_data.get("productOptions", [])
+                first_product["existingVariants"] = product_data.get("existingVariants", [])
+                first_product["shopifyProductId"] = product_data.get("shopifyProductId", "")
+                break
+
     return {
         "found": True,
         "product": first_product,
