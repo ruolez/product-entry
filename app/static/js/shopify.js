@@ -31,6 +31,7 @@ const state = {
     existingVariants: [],
     productOptions: [],
     perStoreShopifyIds: {},
+    variantImage: null,
 };
 
 // ── Init ───────────────────────────────────────────────
@@ -1368,8 +1369,53 @@ function renderAddVariantUI(snap) {
                     <div class="field-error" id="sp-error-new-variant-barcode"></div>
                 </div>
             </div>
+            <div style="margin-top:var(--md-spacing-md);">
+                <label style="font-size:0.75rem; font-weight:500; text-transform:uppercase; letter-spacing:0.5px; color:var(--md-on-surface-variant, #5f6368); margin-bottom:6px; display:block;">Variant Image</label>
+                <div id="sp-new-variant-image-zone" style="border:2px dashed var(--md-outline, #dadce0); border-radius:var(--md-radius-md, 8px); padding:var(--md-spacing-md); text-align:center; cursor:pointer; transition:border-color 0.2s;">
+                    ${state.variantImage
+                        ? `<div style="display:inline-block; position:relative;">
+                            <img src="${state.variantImage.preview}" style="max-height:80px; border-radius:4px;">
+                            <button class="btn btn-icon" id="sp-variant-image-remove" style="position:absolute; top:-8px; right:-8px; background:var(--md-error); color:white; border-radius:50%; width:22px; height:22px; padding:0; font-size:14px; line-height:22px;">
+                                <span class="material-icons-round" style="font-size:14px;">close</span>
+                            </button>
+                           </div>`
+                        : `<span class="material-icons-round" style="font-size:28px; color:var(--md-on-surface-variant, #5f6368); display:block; margin-bottom:4px;">add_photo_alternate</span>
+                           <span class="text-sm text-muted">Click to upload variant image</span>`
+                    }
+                    <input type="file" id="sp-variant-image-input" accept="image/*" style="display:none;">
+                </div>
+            </div>
         </div>
     `;
+
+    // Bind variant image upload
+    const imageZone = document.getElementById("sp-new-variant-image-zone");
+    const imageInput = document.getElementById("sp-variant-image-input");
+    if (imageZone && imageInput) {
+        imageZone.addEventListener("click", (e) => {
+            if (e.target.closest("#sp-variant-image-remove")) return;
+            imageInput.click();
+        });
+        imageInput.addEventListener("change", () => {
+            const file = imageInput.files[0];
+            if (!file || !file.type.startsWith("image/")) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                state.variantImage = { file, preview: ev.target.result, name: file.name };
+                renderAddVariantUI(snap);
+            };
+            reader.readAsDataURL(file);
+            imageInput.value = "";
+        });
+        const removeBtn = document.getElementById("sp-variant-image-remove");
+        if (removeBtn) {
+            removeBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                state.variantImage = null;
+                renderAddVariantUI(snap);
+            });
+        }
+    }
 
     // Bind input events for duplicate detection
     productOptions.forEach((_, i) => {
@@ -1793,6 +1839,17 @@ async function saveProduct() {
         let imageIds = [];
         let perStoreImageIds = {};
 
+        // Upload variant image if present
+        let variantImageIds = [];
+        if (state.variantImage) {
+            saveBtn.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px;"></span> Uploading variant image...';
+            const formData = new FormData();
+            formData.append("image_0", state.variantImage.file);
+            const uploadResp = await fetch("/api/shopify/upload-images", { method: "POST", body: formData });
+            const uploadData = await uploadResp.json();
+            variantImageIds = (uploadData.images || []).map(i => i.id);
+        }
+
         if (state.imageMode === "shared" && state.uploadedImages.length) {
             saveBtn.innerHTML = '<span class="spinner" style="width:18px;height:18px;border-width:2px;"></span> Uploading images...';
             const formData = new FormData();
@@ -1837,7 +1894,7 @@ async function saveProduct() {
         const result = await api.post("/api/shopify/products", {
             store_ids: targetStoreIds,
             per_store_product_data: perStoreProductData,
-            image_ids: imageIds,
+            image_ids: [...imageIds, ...variantImageIds],
             image_mode: state.addVariantMode ? "shared" : state.imageMode,
             per_store_image_ids: perStoreImageIds,
         });
@@ -2025,6 +2082,7 @@ function clearForm() {
     state.existingVariants = [];
     state.productOptions = [];
     state.perStoreShopifyIds = {};
+    state.variantImage = null;
     state._lookupBaseTemplate = null;
 
     setAddVariantFieldVisibility(false);
