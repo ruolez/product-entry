@@ -1403,33 +1403,39 @@ function captureNewVariantForm() {
 }
 
 function setAddVariantFieldVisibility(isVariantMode) {
-    // Product-level SKU/Barcode row
+    // Product-level SKU/Barcode row — hide in variant mode (lives on variant)
     const skuGroup = document.getElementById("sp-sku")?.closest(".flex-row");
     if (skuGroup) skuGroup.classList.toggle("hidden", isVariantMode);
 
-    // Product-level pricing section
+    // Product-level pricing — make read-only in variant mode (show for reference)
+    const pricingFields = ["sp-price", "sp-compare-at-price", "sp-cost"];
+    pricingFields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.readOnly = isVariantMode;
+            el.style.opacity = isVariantMode ? "0.6" : "";
+        }
+    });
     const priceSection = document.getElementById("sp-section-pricing");
-    if (priceSection) priceSection.classList.toggle("hidden", isVariantMode);
+    if (priceSection) {
+        priceSection.style.opacity = isVariantMode ? "0.6" : "";
+        priceSection.style.pointerEvents = isVariantMode ? "none" : "";
+    }
 
-    // Make product fields read-only in variant mode
+    // Make product info fields read-only in variant mode (still visible)
     const readOnlyFields = ["sp-title", "sp-vendor", "sp-product-type"];
     readOnlyFields.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
             el.readOnly = isVariantMode;
-            el.style.opacity = isVariantMode ? "0.7" : "";
-            el.style.pointerEvents = isVariantMode ? "none" : "";
+            el.style.opacity = isVariantMode ? "0.6" : "";
         }
     });
 
-    // Description editor
+    // Description editor — read-only in variant mode
     if (state.quill) {
         state.quill.enable(!isVariantMode);
-        if (isVariantMode) {
-            state.quill.root.style.opacity = "0.7";
-        } else {
-            state.quill.root.style.opacity = "";
-        }
+        state.quill.root.style.opacity = isVariantMode ? "0.6" : "";
     }
 
     // Save button label
