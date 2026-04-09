@@ -128,16 +128,13 @@ function renderStoreSelector() {
 
 async function onStoreSelectionChange() {
     const count = state.selectedStoreIds.length;
-    const activeStore = state.stores.find(s => s.id === state.activeStoreId);
-    const activeLabel = activeStore ? ` — editing: ${activeStore.name}` : "";
-    document.getElementById("sp-store-count-label").textContent =
-        count === 0 ? "No stores selected" : `${count} store${count > 1 ? "s" : ""} selected${activeLabel}`;
     document.getElementById("sp-btn-save").disabled = count === 0;
 
-    // Set active store if none
-    if (!state.activeStoreId && state.selectedStoreIds.length) {
-        state.activeStoreId = state.selectedStoreIds[0];
+    // Set active store if none or if current active was deselected
+    if (!state.activeStoreId || !state.selectedStoreIds.includes(state.activeStoreId)) {
+        state.activeStoreId = state.selectedStoreIds[0] || null;
     }
+
     // Initialize per-store data for new stores
     for (const sid of state.selectedStoreIds) {
         if (!state.perStoreProductData[sid]) {
@@ -150,6 +147,10 @@ async function onStoreSelectionChange() {
             delete state.perStoreProductData[sid];
         }
     }
+
+    // Re-render store selector to show active tab
+    renderStoreSelector();
+    updateStoreLabel();
 
     for (const sid of state.selectedStoreIds) {
         if (state._loaded?.[sid]) continue;
@@ -215,13 +216,15 @@ function switchStore(newStoreId) {
     }
 
     renderStoreSelector();
+    updateStoreLabel();
+}
 
-    // Update status label
-    const activeStore = state.stores.find(s => s.id === newStoreId);
+function updateStoreLabel() {
     const count = state.selectedStoreIds.length;
+    const activeStore = state.stores.find(s => s.id === state.activeStoreId);
     const activeLabel = activeStore ? ` — editing: ${activeStore.name}` : "";
     document.getElementById("sp-store-count-label").textContent =
-        `${count} store${count > 1 ? "s" : ""} selected${activeLabel}`;
+        count === 0 ? "No stores selected" : `${count} store${count > 1 ? "s" : ""} selected${activeLabel}`;
 }
 
 function captureFormState() {
