@@ -1391,38 +1391,75 @@ function bindActionButtons() {
 function validateForm() {
     let valid = true;
 
-    const requiredFields = [
-        { id: "sp-title", errorId: "sp-error-title", label: "Title" },
-        { id: "sp-sku", errorId: "sp-error-sku", label: "SKU" },
-        { id: "sp-barcode", errorId: "sp-error-barcode", label: "Barcode" },
-    ];
+    if (!state.selectedStoreIds.length) {
+        showToast("Select at least one store", "warning");
+        return false;
+    }
 
-    for (const f of requiredFields) {
-        const el = document.getElementById(f.id);
-        const errEl = document.getElementById(f.errorId);
-        if (!el.value.trim()) {
-            errEl.textContent = `${f.label} is required`;
-            el.classList.add("input-error");
-            if (valid) el.focus();
-            valid = false;
-        } else {
-            errEl.textContent = "";
-            el.classList.remove("input-error");
+    // Save current form to active store before validating all
+    if (state.activeStoreId) {
+        state.perStoreProductData[state.activeStoreId] = captureFormState();
+    }
+
+    // Validate ALL stores' data
+    const missingStores = [];
+    for (const sid of state.selectedStoreIds) {
+        const snap = state.perStoreProductData[sid];
+        if (!snap) continue;
+        const storeName = state.stores.find(s => s.id === sid)?.name || `Store ${sid}`;
+        const missing = [];
+        if (!snap.title?.trim()) missing.push("Title");
+        if (!snap.sku?.trim()) missing.push("SKU");
+        if (!snap.barcode?.trim()) missing.push("Barcode");
+        if (missing.length) {
+            missingStores.push({ sid, storeName, missing });
         }
     }
 
-    if (!state.selectedStoreIds.length) {
-        showToast("Select at least one store", "warning");
-        valid = false;
+    if (missingStores.length) {
+        // Switch to the first store with errors and highlight
+        const first = missingStores[0];
+        if (first.sid !== state.activeStoreId) {
+            switchStore(first.sid);
+        }
+
+        // Highlight errors on the visible form
+        const requiredFields = [
+            { id: "sp-title", errorId: "sp-error-title", label: "Title" },
+            { id: "sp-sku", errorId: "sp-error-sku", label: "SKU" },
+            { id: "sp-barcode", errorId: "sp-error-barcode", label: "Barcode" },
+        ];
+        for (const f of requiredFields) {
+            const el = document.getElementById(f.id);
+            const errEl = document.getElementById(f.errorId);
+            if (!el.value.trim()) {
+                errEl.textContent = `${f.label} is required`;
+                el.classList.add("input-error");
+                if (valid) el.focus();
+                valid = false;
+            } else {
+                errEl.textContent = "";
+                el.classList.remove("input-error");
+            }
+        }
+
+        // Show which stores have issues
+        if (missingStores.length > 1) {
+            const names = missingStores.map(s => s.storeName).join(", ");
+            showToast(`Missing required fields on: ${names}`, "warning", 8000);
+        }
+
+        return false;
     }
 
+    // Validate URL handle on current form
     const handle = document.getElementById("sp-seo-handle").value.trim();
     if (handle && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(handle)) {
         showToast("URL handle must be lowercase letters, numbers, and hyphens", "warning");
-        valid = false;
+        return false;
     }
 
-    return valid;
+    return true;
 }
 
 async function saveProduct() {
