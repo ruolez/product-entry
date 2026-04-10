@@ -12,10 +12,7 @@ const STEPS = [
 const PRICE_FIELDS = [
     { field: "UnitCost", label: "Unit Cost" },
     { field: "UnitPrice", label: "Standard Price" },
-    { field: "UnitPriceA", label: "Cash & Carry" },
-    { field: "UnitPriceB", label: "Delivery A" },
-    { field: "UnitPriceC", label: "Delivery B" },
-    { field: "MSRPrice", label: "MSRP" },
+    { field: "UnitPriceB", label: "Delivery B" },
 ];
 
 const REQUIRED_MAPPINGS = ["ProductUPC", "ProductDescription"];
@@ -32,10 +29,7 @@ const STORE_MAPPING_FIELDS = [
     { field: "SubCateName", label: "Subcategory", required: false },
     { field: "UnitCost", label: "Unit Cost", required: false },
     { field: "UnitPrice", label: "Standard Price", required: false },
-    { field: "UnitPriceA", label: "Cash & Carry", required: false },
-    { field: "UnitPriceB", label: "Delivery A", required: false },
-    { field: "UnitPriceC", label: "Delivery B", required: false },
-    { field: "MSRPrice", label: "MSRP", required: false },
+    { field: "UnitPriceB", label: "Delivery B", required: false },
 ];
 
 let state = {
@@ -101,7 +95,7 @@ function resetState() {
 }
 
 function seedStoreMappingsFromAuto() {
-    const perStoreFields = ["SubCateName", "UnitCost", "UnitPrice", "UnitPriceA", "UnitPriceB", "UnitPriceC", "MSRPrice"];
+    const perStoreFields = ["SubCateName", "UnitCost", "UnitPrice", "UnitPriceB"];
     for (const store of state.stores) {
         const sid = String(store.id);
         if (!state.storeMappings[sid]) state.storeMappings[sid] = {};

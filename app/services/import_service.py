@@ -37,21 +37,9 @@ COLUMN_ALIASES = {
         "unit price", "price", "unitprice", "standard price",
         "retail price", "retail", "sell price", "selling price",
     ],
-    "UnitPriceA": [
-        "unitpricea", "price a", "cash and carry", "cash & carry",
-        "c&c price", "pricea",
-    ],
     "UnitPriceB": [
-        "unitpriceb", "price b", "delivery a", "delivery a price",
-        "del a price", "priceb",
-    ],
-    "UnitPriceC": [
-        "unitpricec", "price c", "delivery b", "delivery b price",
-        "del b price", "pricec",
-    ],
-    "MSRPrice": [
-        "msrp", "msrprice", "manufacturer price", "msr price",
-        "suggested retail", "suggested price",
+        "unitpriceb", "price b", "delivery b", "delivery b price",
+        "del b price", "priceb",
     ],
 }
 
@@ -397,6 +385,12 @@ def execute_import(rows, store_ids, category_assignments, price_mode, store_mapp
                                 store_fields[price_field] = float(val)
                             except (ValueError, TypeError):
                                 pass
+                # Default UnitPriceA, UnitPriceC, MSRPrice to UnitPrice if not mapped
+                unit_price = store_fields.get("UnitPrice")
+                if unit_price is not None:
+                    for pf in ("UnitPriceA", "UnitPriceC", "MSRPrice"):
+                        if pf not in store_fields:
+                            store_fields[pf] = unit_price
 
             if store_fields:
                 per_store_fields[sid] = store_fields
