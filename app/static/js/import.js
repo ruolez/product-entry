@@ -988,7 +988,7 @@ function renderFinalSummary(content, footer, data) {
 
     const resultsArea = content.querySelector("#import-results-area");
 
-    const detailRows = data.results
+    const detailRows = (data.results || [])
         .filter(r => r.status !== "skipped")
         .map(r => {
             const icon = r.status === "success"
