@@ -112,6 +112,7 @@ function seedStoreMappingsFromAuto() {
 }
 
 function closeModal() {
+    _pollingActive = false;
     if (modalEl) {
         modalEl.remove();
         modalEl = null;
@@ -861,9 +862,18 @@ function renderValidationReport(content, footer) {
         </div>
     `;
 
+    // Rebuild footer to ensure button exists
+    footer.innerHTML = `
+        <div class="import-footer-left">
+            <button class="btn btn-secondary" id="import-back">Back</button>
+        </div>
+        <div class="import-footer-right">
+            <button class="btn btn-primary" id="import-next">${importableCount > 0 ? `Import ${importableCount} Items` : "No valid items"}</button>
+        </div>
+    `;
     const nextBtn = footer.querySelector("#import-next");
     nextBtn.disabled = importableCount === 0;
-    nextBtn.textContent = `Import ${importableCount} Items`;
+    footer.querySelector("#import-back").addEventListener("click", () => renderStep(3));
     nextBtn.addEventListener("click", () => renderStep(5));
 
     content.querySelectorAll(".skip-check").forEach(cb => {
@@ -876,7 +886,7 @@ function renderValidationReport(content, footer) {
             }
             const newImportable = data.rows.filter(r => r.status === "valid" && !state.skipRows.has(r.row_index)).length;
             nextBtn.disabled = newImportable === 0;
-            nextBtn.textContent = `Import ${newImportable} Items`;
+            nextBtn.textContent = newImportable > 0 ? `Import ${newImportable} Items` : "No valid items";
         });
     });
 }
@@ -923,16 +933,29 @@ async function renderExecuteStep(content, footer) {
     }
 }
 
+let _pollingActive = false;
+
 async function pollImportProgress(batchId, content, footer) {
+    _pollingActive = true;
     const progressFill = content.querySelector("#import-progress-fill");
     const progressText = content.querySelector("#import-progress-text");
+    let failCount = 0;
 
-    while (true) {
+    while (_pollingActive) {
         await new Promise(r => setTimeout(r, 800));
+        if (!_pollingActive) return;
+
         let data;
         try {
             data = await api.get(`/api/import/status/${batchId}`);
+            failCount = 0;
         } catch {
+            failCount++;
+            if (failCount > 15) {
+                if (progressText) progressText.textContent = "Lost connection to import process.";
+                footer.querySelector("#import-done").style.display = "";
+                return;
+            }
             continue;
         }
 
@@ -946,6 +969,7 @@ async function pollImportProgress(batchId, content, footer) {
         }
 
         if (data.status === "completed") {
+            _pollingActive = false;
             state.importResult = data;
             renderFinalSummary(content, footer, data);
             return;
