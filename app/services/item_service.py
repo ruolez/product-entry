@@ -252,6 +252,7 @@ def insert_sibling_item(data):
     stores_succeeded = []
     stores_failed = []
     error_details = {}
+    inserted_data = {}
 
     for store_id in store_ids:
         store = get_store(store_id)
@@ -300,6 +301,7 @@ def insert_sibling_item(data):
                 "product_id": product_id,
             })
             stores_succeeded.append(store_name)
+            inserted_data[str(store_id)] = merged
         except Exception as e:
             results.append({
                 "store_id": store_id,
@@ -310,7 +312,16 @@ def insert_sibling_item(data):
             stores_failed.append(store_name)
             error_details[store_name] = str(e)
 
-    _log_insertion(common_fields, store_ids, stores_succeeded, stores_failed, error_details, data)
+    first_merged = next(iter(inserted_data.values()), common_fields)
+    log_data = {
+        **data,
+        "common_fields": {k: v for k, v in first_merged.items() if v is not None},
+        "per_store_fields": {
+            sid: {k: v for k, v in fields.items() if v is not None}
+            for sid, fields in inserted_data.items()
+        },
+    }
+    _log_insertion(common_fields, store_ids, stores_succeeded, stores_failed, error_details, log_data)
 
     return {
         "success": len(stores_failed) == 0,
