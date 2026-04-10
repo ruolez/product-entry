@@ -652,18 +652,18 @@ function renderStorePanel(storeId) {
                     ${catSubHtml}
                     ${categoryMatchHtml}
                 </div>
-                <div class="import-subsection" style="margin-top:var(--md-spacing-md)">
+                <div class="import-subsection">
                     <div class="import-subsection-label">
                         <span class="material-icons-round" style="font-size:16px">attach_money</span> Pricing
                     </div>
                     <div class="price-mode-toggle">
-                        <label>
+                        <label class="${mode === "excel" ? "price-mode-active" : ""}">
                             <input type="radio" name="price-mode-${sid}" value="excel" ${mode === "excel" ? "checked" : ""}>
-                            Use Excel prices
+                            Excel columns
                         </label>
-                        <label>
+                        <label class="${mode === "formula" ? "price-mode-active" : ""}">
                             <input type="radio" name="price-mode-${sid}" value="formula" ${mode === "formula" ? "checked" : ""}>
-                            Use price formulas
+                            Price formulas
                         </label>
                     </div>
                     ${priceMappingHtml}

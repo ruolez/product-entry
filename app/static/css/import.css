@@ -305,18 +305,19 @@
 
 .import-mapping-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     gap: var(--md-spacing-md);
 }
 
 .import-mapping-row {
     display: flex;
-    align-items: center;
-    gap: var(--md-spacing-sm);
-    padding: var(--md-spacing-sm) var(--md-spacing-md);
+    flex-direction: column;
+    gap: var(--md-spacing-xs);
+    padding: var(--md-spacing-md);
     background: var(--md-surface);
     border: 1px solid var(--md-outline-variant);
     border-radius: var(--md-radius-sm);
+    transition: border-color 0.2s, background 0.2s;
 }
 
 .import-mapping-row.required {
@@ -335,10 +336,11 @@
 
 .mapping-field-name {
     font-family: var(--md-font-family);
-    font-size: 0.8125rem;
-    font-weight: 500;
-    min-width: 100px;
-    flex-shrink: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--md-on-surface-variant);
 }
 
 .mapping-field-name .required-star {
@@ -346,19 +348,23 @@
 }
 
 .mapping-arrow {
-    color: var(--md-on-surface-variant);
-    font-size: 16px;
-    flex-shrink: 0;
+    display: none;
 }
 
 .mapping-select {
-    flex: 1;
-    padding: 6px 10px;
+    width: 100%;
+    padding: 8px 12px;
     border: 1px solid var(--md-outline);
-    border-radius: var(--md-radius-xs);
+    border-radius: var(--md-radius-sm);
     font-size: 0.8125rem;
     background: var(--md-surface);
-    min-width: 0;
+    transition: border-color 0.2s;
+}
+
+.mapping-select:focus {
+    outline: none;
+    border-color: var(--md-primary);
+    box-shadow: 0 0 0 1px var(--md-primary);
 }
 
 /* Store Config (Step 3) */
@@ -395,6 +401,9 @@
 
 .import-store-panel-body {
     padding: var(--md-spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--md-spacing-lg);
 }
 
 .import-store-panel.collapsed .import-store-panel-body {
@@ -403,13 +412,14 @@
 
 /* Price Mode Toggle */
 .price-mode-toggle {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: var(--md-spacing-md);
-    padding: var(--md-spacing-md);
+    gap: 0;
     background: var(--md-surface-variant);
-    border-radius: var(--md-radius-sm);
+    border-radius: var(--md-radius-xl);
     margin-bottom: var(--md-spacing-md);
+    padding: 3px;
+    border: 1px solid var(--md-outline-variant);
 }
 
 .price-mode-toggle label {
@@ -417,38 +427,63 @@
     font-size: 0.8125rem;
     font-weight: 500;
     cursor: pointer;
+    padding: 6px 16px;
+    border-radius: var(--md-radius-xl);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.2s, color 0.2s;
+    color: var(--md-on-surface-variant);
+    white-space: nowrap;
 }
 
 .price-mode-toggle input[type="radio"] {
-    accent-color: var(--md-primary);
+    display: none;
 }
 
-/* Price Mapping Grid */
+.price-mode-toggle label.price-mode-active {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    box-shadow: var(--md-elevation-1);
+}
+
+/* Price / Column Mapping Grid */
 .price-mapping-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: var(--md-spacing-sm);
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--md-spacing-md);
     margin-bottom: var(--md-spacing-md);
 }
 
 .price-mapping-item {
     display: flex;
-    align-items: center;
-    gap: var(--md-spacing-sm);
+    flex-direction: column;
+    gap: var(--md-spacing-xs);
 }
 
 .price-mapping-item label {
-    font-size: 0.8125rem;
-    min-width: 80px;
-    flex-shrink: 0;
+    font-family: var(--md-font-family);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--md-on-surface-variant);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
 }
 
 .price-mapping-item select {
-    flex: 1;
-    padding: 4px 8px;
+    width: 100%;
+    padding: 8px 12px;
     border: 1px solid var(--md-outline);
-    border-radius: var(--md-radius-xs);
+    border-radius: var(--md-radius-sm);
     font-size: 0.8125rem;
+    background: var(--md-surface);
+    transition: border-color 0.2s;
+}
+
+.price-mapping-item select:focus {
+    outline: none;
+    border-color: var(--md-primary);
+    box-shadow: 0 0 0 1px var(--md-primary);
 }
 
 /* Category Match List */
@@ -463,8 +498,9 @@
     align-items: center;
     gap: var(--md-spacing-sm);
     padding: var(--md-spacing-sm) var(--md-spacing-md);
-    border-radius: var(--md-radius-xs);
+    border-radius: var(--md-radius-sm);
     font-size: 0.8125rem;
+    min-height: 40px;
 }
 
 .category-match-item.matched {
@@ -476,7 +512,8 @@
 }
 
 .category-match-item .match-icon {
-    font-size: 18px;
+    font-size: 20px;
+    flex-shrink: 0;
 }
 
 .category-match-item.matched .match-icon {
@@ -488,20 +525,28 @@
 }
 
 .category-match-item .match-text {
-    flex: 1;
+    font-weight: 500;
+    flex-shrink: 0;
+    min-width: 80px;
 }
 
 .category-match-item .match-mapped {
     font-size: 0.75rem;
     color: var(--md-on-surface-variant);
+    margin-left: auto;
+    text-align: right;
+    white-space: nowrap;
 }
 
 .category-match-item select {
-    padding: 4px 8px;
+    margin-left: auto;
+    padding: 6px 10px;
     border: 1px solid var(--md-outline);
-    border-radius: var(--md-radius-xs);
+    border-radius: var(--md-radius-sm);
     font-size: 0.8125rem;
-    max-width: 250px;
+    min-width: 200px;
+    max-width: 320px;
+    background: var(--md-surface);
 }
 
 .copy-all-btn {
@@ -523,15 +568,19 @@
 
 /* Subsection Labels */
 .import-subsection {
-    margin-bottom: var(--md-spacing-md);
+    margin-bottom: 0;
 }
 
 .import-subsection-label {
     font-family: var(--md-font-family);
-    font-size: 0.8125rem;
-    font-weight: 500;
+    font-size: 0.75rem;
+    font-weight: 600;
     color: var(--md-on-surface-variant);
-    margin-bottom: var(--md-spacing-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--md-spacing-md);
+    padding-bottom: var(--md-spacing-sm);
+    border-bottom: 1px solid var(--md-outline-variant);
     display: flex;
     align-items: center;
     gap: var(--md-spacing-sm);
