@@ -27,9 +27,8 @@ const MAPPING_FIELDS = [
     { field: "ProductDescription", label: "Description", required: true },
 ];
 
-// Step 3: per-store fields (category + prices) mapped inside each store panel
+// Step 3: per-store fields mapped inside each store panel
 const STORE_MAPPING_FIELDS = [
-    { field: "CateName", label: "Category", required: false },
     { field: "SubCateName", label: "Subcategory", required: false },
     { field: "UnitCost", label: "Unit Cost", required: false },
     { field: "UnitPrice", label: "Standard Price", required: false },
@@ -102,7 +101,7 @@ function resetState() {
 }
 
 function seedStoreMappingsFromAuto() {
-    const perStoreFields = ["CateName", "SubCateName", "UnitCost", "UnitPrice", "UnitPriceA", "UnitPriceB", "UnitPriceC", "MSRPrice"];
+    const perStoreFields = ["SubCateName", "UnitCost", "UnitPrice", "UnitPriceA", "UnitPriceB", "UnitPriceC", "MSRPrice"];
     for (const store of state.stores) {
         const sid = String(store.id);
         if (!state.storeMappings[sid]) state.storeMappings[sid] = {};
@@ -613,11 +612,10 @@ function renderStorePanel(storeId) {
     const mode = state.priceMode[sid] || "formula";
     const hasFormulas = state.priceFormulas[sid] && state.priceFormulas[sid].length > 0;
 
-    // Category/Subcategory column mapping (per-store)
+    // Subcategory column mapping (per-store; CateID is derived from SubCategories_tbl)
     const catSubHtml = `
         <div class="price-mapping-grid">
-            ${buildColumnSelect(sid, "CateName", "Category")}
-            ${buildColumnSelect(sid, "SubCateName", "Subcategory")}
+            ${buildColumnSelect(sid, "SubCateName", "Subcategory Column")}
         </div>
     `;
 
@@ -693,7 +691,7 @@ function renderStorePanel(storeId) {
             <div class="import-store-panel-body">
                 <div class="import-subsection">
                     <div class="import-subsection-label">
-                        <span class="material-icons-round" style="font-size:16px">category</span> Category / Subcategory
+                        <span class="material-icons-round" style="font-size:16px">category</span> Subcategory
                     </div>
                     ${catSubHtml}
                     ${categoryMatchHtml}

@@ -27,13 +27,10 @@ COLUMN_ALIASES = {
         "description", "name", "product name", "productdescription",
         "product description", "item name", "item description", "product",
     ],
-    "CateName": [
-        "category", "main category", "categoryname", "category name",
-        "dept", "department",
-    ],
     "SubCateName": [
         "subcategory", "sub category", "subcatename", "sub category name",
-        "subcategory name", "sub-category",
+        "subcategory name", "sub-category", "category", "main category",
+        "categoryname", "category name", "dept", "department",
     ],
     "UnitCost": ["unit cost", "cost", "unitcost", "cost price"],
     "UnitPrice": [
@@ -169,14 +166,10 @@ def extract_rows_with_mapping(file_bytes, sheet_name, column_mapping):
 
 def match_categories(store_ids, rows):
     unique_subcats = set()
-    unique_cats = set()
     for row in rows:
         sub_text = row.get("SubCateName", "").strip()
-        cat_text = row.get("CateName", "").strip()
         if sub_text:
             unique_subcats.add(sub_text)
-        if cat_text:
-            unique_cats.add(cat_text)
 
     results = {}
     for store_id in store_ids:
@@ -409,7 +402,7 @@ def execute_import(rows, store_ids, category_assignments, price_mode, store_mapp
                 per_store_fields[sid] = store_fields
 
         common_fields = {}
-        skip_keys = {"SubCateName", "CateName", "CateID", "SubCateID", "_raw"}
+        skip_keys = {"SubCateName", "CateID", "SubCateID", "_raw"}
         for key, val in row.items():
             if key in skip_keys:
                 continue
