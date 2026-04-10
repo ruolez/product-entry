@@ -939,7 +939,10 @@ async function pollImportProgress(batchId, content, footer) {
         const pct = data.total > 0 ? Math.round((data.processed / data.total) * 100) : 0;
         if (progressFill) progressFill.style.width = `${pct}%`;
         if (progressText) {
-            progressText.textContent = `Importing... ${data.processed} of ${data.total} rows (${data.succeeded} succeeded, ${data.failed} failed)`;
+            const rowsDone = data.results ? data.results.length : 0;
+            const totalRows = data.total_rows || 0;
+            const skipped = data.skipped || 0;
+            progressText.textContent = `Row ${rowsDone} of ${totalRows - skipped} — ${data.succeeded} store inserts succeeded, ${data.failed} failed`;
         }
 
         if (data.status === "completed") {

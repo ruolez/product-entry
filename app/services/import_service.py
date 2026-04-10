@@ -1,3 +1,4 @@
+import json as _json
 import os
 import uuid
 import tempfile
@@ -14,7 +15,7 @@ from services.item_service import insert_item, get_field_configs
 
 UPLOAD_DIR = tempfile.gettempdir()
 _file_cache = {}
-_import_progress = {}  # batch_id -> {status, total, processed, succeeded, failed, skipped, results, error}
+_progress_lock = threading.Lock()
 
 COLUMN_ALIASES = {
     "ProductUPC": [
@@ -332,21 +333,47 @@ def validate_batch(rows, store_ids, category_assignments, store_mappings=None):
     return results
 
 
+def _progress_path(batch_id):
+    return os.path.join(UPLOAD_DIR, f"import_progress_{batch_id}.json")
+
+
+def _save_progress(batch_id, progress):
+    path = _progress_path(batch_id)
+    with _progress_lock:
+        with open(path, "w") as f:
+            _json.dump(progress, f)
+
+
+def _load_progress(batch_id):
+    path = _progress_path(batch_id)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r") as f:
+            return _json.load(f)
+    except Exception:
+        return None
+
+
 def get_import_status(batch_id):
-    return _import_progress.get(batch_id)
+    return _load_progress(batch_id)
 
 
 def start_import(app, rows, store_ids, category_assignments, price_mode, store_mappings, skip_rows, upload_id):
     batch_id = str(uuid.uuid4())
-    _import_progress[batch_id] = {
+    importable = len([i for i in range(len(rows)) if i not in set(skip_rows or [])])
+    total_ops = importable * len(store_ids)
+    _save_progress(batch_id, {
         "status": "running",
-        "total": len(rows),
+        "total_rows": len(rows),
+        "total_stores": len(store_ids),
+        "total": total_ops,
         "processed": 0,
         "succeeded": 0,
         "failed": 0,
-        "skipped": 0,
+        "skipped": len(rows) - importable,
         "results": [],
-    }
+    })
 
     def run():
         with app.app_context():
@@ -359,7 +386,7 @@ def start_import(app, rows, store_ids, category_assignments, price_mode, store_m
 
 
 def _execute_import(batch_id, rows, store_ids, category_assignments, price_mode, store_mappings, skip_rows, upload_id):
-    progress = _import_progress[batch_id]
+    progress = _load_progress(batch_id) or {}
     skip_set = set(skip_rows) if skip_rows else set()
 
     price_field_names = {"UnitCost", "UnitPrice", "UnitPriceA", "UnitPriceB", "UnitPriceC", "MSRPrice"}
@@ -368,16 +395,11 @@ def _execute_import(batch_id, rows, store_ids, category_assignments, price_mode,
         for sid in store_ids
     )
 
+    def _update_progress():
+        _save_progress(batch_id, progress)
+
     for idx, row in enumerate(rows):
         if idx in skip_set:
-            progress["skipped"] += 1
-            progress["processed"] += 1
-            progress["results"].append({
-                "row_index": idx,
-                "upc": row.get("ProductUPC", ""),
-                "description": row.get("ProductDescription", ""),
-                "status": "skipped",
-            })
             continue
 
         per_store_fields = {}
@@ -439,8 +461,8 @@ def _execute_import(batch_id, rows, store_ids, category_assignments, price_mode,
         try:
             result = insert_item(data)
         except Exception as e:
-            progress["failed"] += 1
-            progress["processed"] += 1
+            progress["failed"] += len(store_ids)
+            progress["processed"] += len(store_ids)
             progress["results"].append({
                 "row_index": idx,
                 "upc": row.get("ProductUPC", ""),
@@ -449,30 +471,29 @@ def _execute_import(batch_id, rows, store_ids, category_assignments, price_mode,
                 "errors": [{"field": "general", "error": str(e)}],
                 "results": [],
             })
+            _update_progress()
             continue
 
-        progress["processed"] += 1
-        if result["success"]:
-            progress["succeeded"] += 1
-            progress["results"].append({
-                "row_index": idx,
-                "upc": row.get("ProductUPC", ""),
-                "description": row.get("ProductDescription", ""),
-                "status": "success",
-                "results": result["results"],
-            })
-        else:
-            progress["failed"] += 1
-            progress["results"].append({
-                "row_index": idx,
-                "upc": row.get("ProductUPC", ""),
-                "description": row.get("ProductDescription", ""),
-                "status": "failed",
-                "errors": result.get("errors", []),
-                "results": result.get("results", []),
-            })
+        store_results = result.get("results", [])
+        store_succeeded = sum(1 for r in store_results if r.get("success"))
+        store_failed = len(store_results) - store_succeeded
+        progress["succeeded"] += store_succeeded
+        progress["failed"] += store_failed
+        progress["processed"] += len(store_results)
+
+        row_status = "success" if result["success"] else "failed"
+        progress["results"].append({
+            "row_index": idx,
+            "upc": row.get("ProductUPC", ""),
+            "description": row.get("ProductDescription", ""),
+            "status": row_status,
+            "errors": result.get("errors", []),
+            "results": store_results,
+        })
+        _update_progress()
 
     progress["status"] = "completed"
+    _update_progress()
     cleanup_upload(upload_id)
 
 
