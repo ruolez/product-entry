@@ -338,11 +338,21 @@ def _progress_path(batch_id):
     return os.path.join(UPLOAD_DIR, f"import_progress_{batch_id}.json")
 
 
+def _safe_serialize(obj):
+    if isinstance(obj, dict):
+        return {k: _safe_serialize(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_safe_serialize(v) for v in obj]
+    if isinstance(obj, (int, float, str, bool)) or obj is None:
+        return obj
+    return str(obj)
+
+
 def _save_progress(batch_id, progress):
     path = _progress_path(batch_id)
     with _progress_lock:
         with open(path, "w") as f:
-            _json.dump(progress, f)
+            _json.dump(_safe_serialize(progress), f)
 
 
 def _load_progress(batch_id):
