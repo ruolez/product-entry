@@ -1,5 +1,7 @@
 from flask import Blueprint, jsonify, request
 
+from flask import current_app
+
 from services.import_service import (
     store_upload,
     get_upload,
@@ -8,7 +10,8 @@ from services.import_service import (
     extract_rows_with_mapping,
     match_categories,
     validate_batch,
-    execute_import,
+    start_import,
+    get_import_status,
 )
 from services.lookup_service import get_all_subcategories
 
@@ -163,16 +166,23 @@ def execute():
         int_store_mappings[sid] = {k: int(v) for k, v in mapping.items()}
 
     try:
-        result = execute_import(
+        batch_id = start_import(
+            current_app._get_current_object(),
             rows, store_ids, category_assignments,
-            price_mode, int_store_mappings, skip_rows,
+            price_mode, int_store_mappings, skip_rows, upload_id,
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-    cleanup_upload(upload_id)
+    return jsonify({"batch_id": batch_id, "status": "running"})
 
-    return jsonify(result)
+
+@import_bp.route("/status/<batch_id>")
+def import_status(batch_id):
+    progress = get_import_status(batch_id)
+    if not progress:
+        return jsonify({"error": "Import not found"}), 404
+    return jsonify(progress)
 
 
 @import_bp.route("/stores/<int:store_id>/subcategories-list")

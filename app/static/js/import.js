@@ -903,7 +903,7 @@ async function renderExecuteStep(content, footer) {
     try {
         const mergedAssignments = buildMergedAssignments();
 
-        const data = await api.post("/api/import/execute", {
+        const startData = await api.post("/api/import/execute", {
             upload_id: state.uploadId,
             store_ids: state.selectedStoreIds,
             column_mapping: state.columnMapping,
@@ -914,12 +914,39 @@ async function renderExecuteStep(content, footer) {
             sheet_name: state.activeSheet,
         });
 
-        state.importResult = data;
-        renderFinalSummary(content, footer, data);
+        const batchId = startData.batch_id;
+        await pollImportProgress(batchId, content, footer);
     } catch (err) {
         content.innerHTML = `<p class="text-error">Import failed: ${escapeHtml(err.message)}</p>`;
         showToast(err.message || "Import failed", "error");
         footer.querySelector("#import-done").style.display = "";
+    }
+}
+
+async function pollImportProgress(batchId, content, footer) {
+    const progressFill = content.querySelector("#import-progress-fill");
+    const progressText = content.querySelector("#import-progress-text");
+
+    while (true) {
+        await new Promise(r => setTimeout(r, 800));
+        let data;
+        try {
+            data = await api.get(`/api/import/status/${batchId}`);
+        } catch {
+            continue;
+        }
+
+        const pct = data.total > 0 ? Math.round((data.processed / data.total) * 100) : 0;
+        if (progressFill) progressFill.style.width = `${pct}%`;
+        if (progressText) {
+            progressText.textContent = `Importing... ${data.processed} of ${data.total} rows (${data.succeeded} succeeded, ${data.failed} failed)`;
+        }
+
+        if (data.status === "completed") {
+            state.importResult = data;
+            renderFinalSummary(content, footer, data);
+            return;
+        }
     }
 }
 

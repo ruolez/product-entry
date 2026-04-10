@@ -1,6 +1,7 @@
 import os
 import uuid
 import tempfile
+import threading
 from io import BytesIO
 
 from openpyxl import load_workbook
@@ -13,6 +14,7 @@ from services.item_service import insert_item, get_field_configs
 
 UPLOAD_DIR = tempfile.gettempdir()
 _file_cache = {}
+_import_progress = {}  # batch_id -> {status, total, processed, succeeded, failed, skipped, results, error}
 
 COLUMN_ALIASES = {
     "ProductUPC": [
@@ -330,13 +332,34 @@ def validate_batch(rows, store_ids, category_assignments, store_mappings=None):
     return results
 
 
-def execute_import(rows, store_ids, category_assignments, price_mode, store_mappings, skip_rows):
-    batch_id = str(uuid.uuid4())
-    results = []
-    succeeded = 0
-    failed = 0
-    skipped = 0
+def get_import_status(batch_id):
+    return _import_progress.get(batch_id)
 
+
+def start_import(app, rows, store_ids, category_assignments, price_mode, store_mappings, skip_rows, upload_id):
+    batch_id = str(uuid.uuid4())
+    _import_progress[batch_id] = {
+        "status": "running",
+        "total": len(rows),
+        "processed": 0,
+        "succeeded": 0,
+        "failed": 0,
+        "skipped": 0,
+        "results": [],
+    }
+
+    def run():
+        with app.app_context():
+            _execute_import(batch_id, rows, store_ids, category_assignments,
+                            price_mode, store_mappings, skip_rows, upload_id)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    return batch_id
+
+
+def _execute_import(batch_id, rows, store_ids, category_assignments, price_mode, store_mappings, skip_rows, upload_id):
+    progress = _import_progress[batch_id]
     skip_set = set(skip_rows) if skip_rows else set()
 
     price_field_names = {"UnitCost", "UnitPrice", "UnitPriceA", "UnitPriceB", "UnitPriceC", "MSRPrice"}
@@ -347,8 +370,9 @@ def execute_import(rows, store_ids, category_assignments, price_mode, store_mapp
 
     for idx, row in enumerate(rows):
         if idx in skip_set:
-            skipped += 1
-            results.append({
+            progress["skipped"] += 1
+            progress["processed"] += 1
+            progress["results"].append({
                 "row_index": idx,
                 "upc": row.get("ProductUPC", ""),
                 "description": row.get("ProductDescription", ""),
@@ -363,7 +387,6 @@ def execute_import(rows, store_ids, category_assignments, price_mode, store_mapp
             sm = store_mappings.get(sid, {})
             raw = row.get("_raw", [])
 
-            # Category/Subcategory from per-store column mapping
             sub_text = _get_raw_value(row, store_mappings, sid, "SubCateName")
             if sub_text:
                 cat_data = category_assignments.get(sid, {}).get(sub_text, {})
@@ -371,7 +394,6 @@ def execute_import(rows, store_ids, category_assignments, price_mode, store_mapp
                     store_fields["CateID"] = cat_data["CateID"]
                     store_fields["SubCateID"] = cat_data["SubCateID"]
 
-            # Prices from per-store column mapping
             store_price_mode = price_mode.get(sid, "formula")
             if store_price_mode == "excel":
                 for price_field in ("UnitCost", "UnitPrice", "UnitPriceA", "UnitPriceB", "UnitPriceC", "MSRPrice"):
@@ -379,14 +401,13 @@ def execute_import(rows, store_ids, category_assignments, price_mode, store_mapp
                     if col_idx is not None:
                         try:
                             val = raw[col_idx] if col_idx < len(raw) else ""
-                        except (IndexError):
+                        except IndexError:
                             val = ""
                         if val is not None and val != "":
                             try:
                                 store_fields[price_field] = float(val)
                             except (ValueError, TypeError):
                                 pass
-                # Default unmapped price fields to UnitPrice
                 unit_price = store_fields.get("UnitPrice")
                 if unit_price is not None:
                     for pf in ("UnitPriceA", "UnitPriceB", "UnitPriceC", "MSRPrice"):
@@ -403,8 +424,6 @@ def execute_import(rows, store_ids, category_assignments, price_mode, store_mapp
                 continue
             if key.startswith("_"):
                 continue
-            # If any store uses formula mode, don't put prices in common_fields
-            # They will be handled per-store (either from Excel or via formula)
             if key in price_field_names and any_store_uses_formula:
                 continue
             if val is not None and val != "":
@@ -420,8 +439,9 @@ def execute_import(rows, store_ids, category_assignments, price_mode, store_mapp
         try:
             result = insert_item(data)
         except Exception as e:
-            failed += 1
-            results.append({
+            progress["failed"] += 1
+            progress["processed"] += 1
+            progress["results"].append({
                 "row_index": idx,
                 "upc": row.get("ProductUPC", ""),
                 "description": row.get("ProductDescription", ""),
@@ -431,9 +451,10 @@ def execute_import(rows, store_ids, category_assignments, price_mode, store_mapp
             })
             continue
 
+        progress["processed"] += 1
         if result["success"]:
-            succeeded += 1
-            results.append({
+            progress["succeeded"] += 1
+            progress["results"].append({
                 "row_index": idx,
                 "upc": row.get("ProductUPC", ""),
                 "description": row.get("ProductDescription", ""),
@@ -441,8 +462,8 @@ def execute_import(rows, store_ids, category_assignments, price_mode, store_mapp
                 "results": result["results"],
             })
         else:
-            failed += 1
-            results.append({
+            progress["failed"] += 1
+            progress["results"].append({
                 "row_index": idx,
                 "upc": row.get("ProductUPC", ""),
                 "description": row.get("ProductDescription", ""),
@@ -451,14 +472,8 @@ def execute_import(rows, store_ids, category_assignments, price_mode, store_mapp
                 "results": result.get("results", []),
             })
 
-    return {
-        "batch_id": batch_id,
-        "total": len(rows),
-        "succeeded": succeeded,
-        "failed": failed,
-        "skipped": skipped,
-        "results": results,
-    }
+    progress["status"] = "completed"
+    cleanup_upload(upload_id)
 
 
 def _chunks(lst, n):
