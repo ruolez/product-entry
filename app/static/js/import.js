@@ -755,9 +755,9 @@ async function renderValidationStep(content, footer) {
         });
         state.validationResults = data;
         state.skipRows = new Set();
-        // Auto-skip duplicates
+        // Auto-skip duplicates and error rows
         for (const row of data.rows) {
-            if (row.status === "duplicate") {
+            if (row.status === "duplicate" || row.status === "error") {
                 state.skipRows.add(row.row_index);
             }
         }
@@ -826,7 +826,7 @@ function renderValidationReport(content, footer) {
             <tr class="status-${row.status} ${isSkipped ? "skipped" : ""}">
                 <td>
                     <input type="checkbox" class="skip-check" data-row="${row.row_index}"
-                        ${isSkipped ? "" : "checked"} ${row.status === "error" ? "disabled" : ""}>
+                        ${isSkipped ? "" : "checked"} ${row.status === "error" || row.status === "duplicate" ? "disabled" : ""}>
                 </td>
                 <td>${row.row_index + 1}</td>
                 <td>${escapeHtml(row.upc || "")}</td>
