@@ -25,9 +25,22 @@ export async function apiRequest(method, url, body = null) {
     return data;
 }
 
+export async function apiUpload(url, formData) {
+    const response = await fetch(url, {
+        method: "POST",
+        body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new ApiError(response.status, data);
+    }
+    return data;
+}
+
 export const api = {
     get: (url) => apiRequest("GET", url),
     post: (url, body) => apiRequest("POST", url, body),
     put: (url, body) => apiRequest("PUT", url, body),
     delete: (url, body) => apiRequest("DELETE", url, body),
+    upload: (url, formData) => apiUpload(url, formData),
 };

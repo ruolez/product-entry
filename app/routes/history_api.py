@@ -24,6 +24,7 @@ def _parse_filters():
         "date_from": request.args.get("date_from") or None,
         "date_to": request.args.get("date_to") or None,
         "store_name": request.args.get("store") or None,
+        "batch_id": request.args.get("batch_id") or None,
     }
 
 

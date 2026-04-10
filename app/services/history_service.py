@@ -15,7 +15,8 @@ WITH combined AS (
         stores_failed,
         error_details,
         form_data,
-        NULL::jsonb AS shopify_product_ids
+        NULL::jsonb AS shopify_product_ids,
+        batch_id
     FROM insertion_log
 
     UNION ALL
@@ -32,7 +33,8 @@ WITH combined AS (
         stores_failed,
         error_details,
         form_data,
-        shopify_product_ids
+        shopify_product_ids,
+        NULL::uuid AS batch_id
     FROM shopify_insertion_log
 ),
 with_status AS (
@@ -48,7 +50,7 @@ with_status AS (
 
 
 def _build_filters(params, search=None, entry_type=None, status=None,
-                   date_from=None, date_to=None, store_name=None):
+                   date_from=None, date_to=None, store_name=None, batch_id=None):
     clauses = []
     if search:
         clauses.append(
@@ -70,14 +72,17 @@ def _build_filters(params, search=None, entry_type=None, status=None,
     if store_name:
         clauses.append(":store_name = ANY(stores_targeted)")
         params["store_name"] = store_name
+    if batch_id:
+        clauses.append("batch_id = :batch_id::uuid")
+        params["batch_id"] = batch_id
     return " AND ".join(clauses)
 
 
 def get_history_entries(page=1, per_page=25, search=None, entry_type=None,
                         status=None, date_from=None, date_to=None,
-                        store_name=None):
+                        store_name=None, batch_id=None):
     params = {}
-    where = _build_filters(params, search, entry_type, status, date_from, date_to, store_name)
+    where = _build_filters(params, search, entry_type, status, date_from, date_to, store_name, batch_id)
     where_clause = f"WHERE {where}" if where else ""
 
     count_sql = f"{_COMBINED_CTE} SELECT COUNT(*) FROM with_status {where_clause}"
@@ -89,7 +94,7 @@ def get_history_entries(page=1, per_page=25, search=None, entry_type=None,
     data_sql = (
         f"{_COMBINED_CTE} "
         f"SELECT id, entry_type, created_at, product_name, product_upc, product_sku, "
-        f"stores_targeted, stores_succeeded, stores_failed, status "
+        f"stores_targeted, stores_succeeded, stores_failed, status, batch_id "
         f"FROM with_status {where_clause} "
         f"ORDER BY created_at DESC LIMIT :limit OFFSET :offset"
     )
@@ -108,6 +113,7 @@ def get_history_entries(page=1, per_page=25, search=None, entry_type=None,
             "stores_targeted": r["stores_targeted"] or [],
             "stores_succeeded": r["stores_succeeded"] or [],
             "stores_failed": r["stores_failed"] or [],
+            "batch_id": str(r["batch_id"]) if r["batch_id"] else None,
             "store_count": len(r["stores_targeted"] or []),
         })
 
@@ -178,9 +184,9 @@ def _get_store_names(store_ids):
 
 
 def get_history_stats(search=None, entry_type=None, date_from=None,
-                      date_to=None, store_name=None):
+                      date_to=None, store_name=None, batch_id=None):
     params = {}
-    where = _build_filters(params, search, entry_type, None, date_from, date_to, store_name)
+    where = _build_filters(params, search, entry_type, None, date_from, date_to, store_name, batch_id)
     where_clause = f"WHERE {where}" if where else ""
 
     sql = (
@@ -249,9 +255,10 @@ def delete_failed_entries():
 
 
 def export_history_entries(search=None, entry_type=None, status=None,
-                           date_from=None, date_to=None, store_name=None):
+                           date_from=None, date_to=None, store_name=None,
+                           batch_id=None):
     params = {}
-    where = _build_filters(params, search, entry_type, status, date_from, date_to, store_name)
+    where = _build_filters(params, search, entry_type, status, date_from, date_to, store_name, batch_id)
     where_clause = f"WHERE {where}" if where else ""
 
     sql = (

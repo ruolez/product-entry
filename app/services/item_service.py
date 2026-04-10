@@ -172,7 +172,8 @@ def insert_item(data):
             stores_failed.append(store_name)
             error_details[store_name] = str(e)
 
-    _log_insertion(common_fields, store_ids, stores_succeeded, stores_failed, error_details, data)
+    batch_id = data.get("batch_id")
+    _log_insertion(common_fields, store_ids, stores_succeeded, stores_failed, error_details, data, batch_id=batch_id)
 
     return {
         "success": len(stores_failed) == 0,
@@ -181,7 +182,7 @@ def insert_item(data):
     }
 
 
-def _log_insertion(common_fields, store_ids, succeeded, failed, error_details, form_data):
+def _log_insertion(common_fields, store_ids, succeeded, failed, error_details, form_data, batch_id=None):
     try:
         store_names_targeted = []
         for sid in store_ids:
@@ -191,8 +192,8 @@ def _log_insertion(common_fields, store_ids, succeeded, failed, error_details, f
         db.session.execute(
             db.text(
                 "INSERT INTO insertion_log "
-                "(product_upc, product_sku, product_desc, stores_targeted, stores_succeeded, stores_failed, error_details, form_data) "
-                "VALUES (:upc, :sku, :desc, :targeted, :succeeded, :failed, :errors, :form_data)"
+                "(product_upc, product_sku, product_desc, stores_targeted, stores_succeeded, stores_failed, error_details, form_data, batch_id) "
+                "VALUES (:upc, :sku, :desc, :targeted, :succeeded, :failed, :errors, :form_data, :batch_id)"
             ),
             {
                 "upc": common_fields.get("ProductUPC"),
@@ -203,6 +204,7 @@ def _log_insertion(common_fields, store_ids, succeeded, failed, error_details, f
                 "failed": failed,
                 "errors": json.dumps(error_details),
                 "form_data": json.dumps(form_data, default=str),
+                "batch_id": batch_id,
             },
         )
         db.session.commit()

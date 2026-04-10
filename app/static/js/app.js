@@ -1280,6 +1280,11 @@ function bindActionButtons() {
             clearForm();
         }
     });
+    document.getElementById("btn-import")?.addEventListener("click", async () => {
+        const mod = await import("./import.js");
+        mod.initImport(state.stores, state.selectedStoreIds, state.priceFormulas);
+        mod.openImportModal();
+    });
 }
 
 // ── Keyboard Navigation ────────────────────────────────
