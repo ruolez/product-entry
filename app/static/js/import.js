@@ -970,6 +970,9 @@ async function pollImportProgress(batchId, content, footer) {
 
         if (data.status === "completed") {
             _pollingActive = false;
+            if (data.error) {
+                if (progressText) progressText.textContent = `Import stopped: ${data.error}`;
+            }
             state.importResult = data;
             renderFinalSummary(content, footer, data);
             return;

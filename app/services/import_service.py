@@ -13,7 +13,8 @@ from services.lookup_service import get_all_subcategories
 from services.item_service import insert_item, get_field_configs
 
 
-UPLOAD_DIR = tempfile.gettempdir()
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "import_tmp")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 _file_cache = {}
 _progress_lock = threading.Lock()
 
@@ -377,8 +378,14 @@ def start_import(app, rows, store_ids, category_assignments, price_mode, store_m
 
     def run():
         with app.app_context():
-            _execute_import(batch_id, rows, store_ids, category_assignments,
-                            price_mode, store_mappings, skip_rows, upload_id)
+            try:
+                _execute_import(batch_id, rows, store_ids, category_assignments,
+                                price_mode, store_mappings, skip_rows, upload_id)
+            except Exception as e:
+                progress = _load_progress(batch_id) or {}
+                progress["status"] = "completed"
+                progress["error"] = str(e)
+                _save_progress(batch_id, progress)
 
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
@@ -386,7 +393,10 @@ def start_import(app, rows, store_ids, category_assignments, price_mode, store_m
 
 
 def _execute_import(batch_id, rows, store_ids, category_assignments, price_mode, store_mappings, skip_rows, upload_id):
-    progress = _load_progress(batch_id) or {}
+    progress = _load_progress(batch_id) or {
+        "status": "running", "total_rows": len(rows), "total_stores": len(store_ids),
+        "total": 0, "processed": 0, "succeeded": 0, "failed": 0, "skipped": 0, "results": [],
+    }
     skip_set = set(skip_rows) if skip_rows else set()
 
     price_field_names = {"UnitCost", "UnitPrice", "UnitPriceA", "UnitPriceB", "UnitPriceC", "MSRPrice"}

@@ -1,4 +1,5 @@
 .env
+app/import_tmp/
 __pycache__/
 *.pyc
 *.pyo
