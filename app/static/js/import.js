@@ -20,10 +20,15 @@ const PRICE_FIELDS = [
 
 const REQUIRED_MAPPINGS = ["ProductUPC", "ProductDescription"];
 
+// Step 2: only universal fields shared across all stores
 const MAPPING_FIELDS = [
     { field: "ProductUPC", label: "UPC", required: true },
     { field: "ProductSKU", label: "SKU", required: false },
     { field: "ProductDescription", label: "Description", required: true },
+];
+
+// Step 3: per-store fields (category + prices) mapped inside each store panel
+const STORE_MAPPING_FIELDS = [
     { field: "CateName", label: "Category", required: false },
     { field: "SubCateName", label: "Subcategory", required: false },
     { field: "UnitCost", label: "Unit Cost", required: false },
@@ -373,7 +378,6 @@ function buildPreviewTable(mappedIndices) {
 // ── Step 3: Store Selection & Price/Category Config ───────
 
 async function renderStoreStep(content, footer) {
-    content.innerHTML = `<div class="import-loading"><div class="spinner"></div><p>Matching categories...</p></div>`;
     footer.innerHTML = `
         <div class="import-footer-left">
             <button class="btn btn-secondary" id="import-back">Back</button>
@@ -383,23 +387,6 @@ async function renderStoreStep(content, footer) {
         </div>
     `;
     footer.querySelector("#import-back").addEventListener("click", () => renderStep(2));
-
-    const hasCatMapping = state.columnMapping.SubCateName !== undefined;
-
-    if (hasCatMapping && !Object.keys(state.categoryMatches).length) {
-        try {
-            const data = await api.post("/api/import/match-categories", {
-                upload_id: state.uploadId,
-                store_ids: state.selectedStoreIds,
-                column_mapping: state.columnMapping,
-                sheet_name: state.activeSheet,
-            });
-            state.categoryMatches = data;
-            initCategoryAssignments();
-        } catch (err) {
-            showToast(err.message || "Failed to match categories", "error");
-        }
-    }
 
     renderStoreStepContent(content, footer);
 }
@@ -418,6 +405,26 @@ function initCategoryAssignments() {
                 };
             }
         }
+    }
+}
+
+async function fetchCategoryMatches() {
+    const hasCatMapping = state.columnMapping.SubCateName !== undefined;
+    if (!hasCatMapping || !state.selectedStoreIds.length) {
+        state.categoryMatches = {};
+        return;
+    }
+    try {
+        const data = await api.post("/api/import/match-categories", {
+            upload_id: state.uploadId,
+            store_ids: state.selectedStoreIds,
+            column_mapping: state.columnMapping,
+            sheet_name: state.activeSheet,
+        });
+        state.categoryMatches = data;
+        initCategoryAssignments();
+    } catch (err) {
+        showToast(err.message || "Failed to match categories", "error");
     }
 }
 
@@ -441,8 +448,11 @@ function renderStoreStepContent(content, footer) {
             </div>
             <div class="store-selector" style="margin-bottom:0">${storeChips}</div>
         </div>
+        <p class="text-sm text-muted" style="margin-top:var(--md-spacing-sm);">
+            Unmapped fields will use defaults from Settings. Price formulas apply when "Use price formulas" is selected.
+        </p>
         <div style="margin-top: var(--md-spacing-md); display: flex; align-items: center; gap: var(--md-spacing-sm);">
-            <button class="copy-all-btn" id="import-copy-prices">Copy first store's price mapping to all</button>
+            <button class="copy-all-btn" id="import-copy-store">Copy first store's settings to all</button>
         </div>
         <div class="import-store-panels" style="margin-top: var(--md-spacing-md);">${panels}</div>
     `;
@@ -483,6 +493,24 @@ function renderStoreStepContent(content, footer) {
         });
     });
 
+    // Per-store category/subcategory column mapping selects
+    content.querySelectorAll(".store-col-mapping-select").forEach(sel => {
+        sel.addEventListener("change", async (e) => {
+            const field = e.target.dataset.field;
+            const val = e.target.value;
+            if (val === "") {
+                delete state.columnMapping[field];
+            } else {
+                state.columnMapping[field] = parseInt(val);
+            }
+            // Re-fetch category matches with updated mapping
+            state.categoryMatches = {};
+            state.categoryAssignments = {};
+            await fetchCategoryMatches();
+            renderStoreStepContent(content, footer);
+        });
+    });
+
     content.querySelectorAll(".category-manual-select").forEach(sel => {
         sel.addEventListener("change", (e) => {
             const sid = e.target.dataset.store;
@@ -502,7 +530,7 @@ function renderStoreStepContent(content, footer) {
         });
     });
 
-    content.querySelector("#import-copy-prices")?.addEventListener("click", () => {
+    content.querySelector("#import-copy-store")?.addEventListener("click", () => {
         if (!state.selectedStoreIds.length) return;
         const firstSid = String(state.selectedStoreIds[0]);
         const firstMode = state.priceMode[firstSid] || "formula";
@@ -513,8 +541,23 @@ function renderStoreStepContent(content, footer) {
             state.priceMapping[s] = { ...firstMapping };
         }
         renderStoreStepContent(content, footer);
-        showToast("Price settings copied to all stores", "info");
+        showToast("Settings copied to all stores", "info");
     });
+}
+
+function buildColumnSelect(field, label) {
+    const currentIdx = state.columnMapping[field];
+    const opts = [`<option value="">-- Not mapped (use default) --</option>`];
+    state.headers.forEach((h, i) => {
+        const sel = currentIdx === i ? "selected" : "";
+        opts.push(`<option value="${i}" ${sel}>${escapeHtml(h)} (Col ${i + 1})</option>`);
+    });
+    return `
+        <div class="price-mapping-item">
+            <label>${label}</label>
+            <select class="store-col-mapping-select" data-field="${field}">${opts.join("")}</select>
+        </div>
+    `;
 }
 
 function renderStorePanel(storeId) {
@@ -525,34 +568,18 @@ function renderStorePanel(storeId) {
     const mode = state.priceMode[sid] || "formula";
     const hasFormulas = state.priceFormulas[sid] && state.priceFormulas[sid].length > 0;
 
-    let priceMappingHtml = "";
-    if (mode === "excel") {
-        const items = PRICE_FIELDS.map(pf => {
-            const currentMap = (state.priceMapping[sid] || {})[pf.field] || "";
-            const opts = [`<option value="">-- Not mapped --</option>`];
-            state.headers.forEach((h, i) => {
-                const sel = currentMap === String(i) || currentMap === pf.field ? "selected" : "";
-                opts.push(`<option value="${i}" ${sel}>${escapeHtml(h)}</option>`);
-            });
-            // Also offer globally mapped price columns
-            if (state.columnMapping[pf.field] !== undefined) {
-                const gIdx = state.columnMapping[pf.field];
-                const headerName = state.headers[gIdx] || `Col ${gIdx + 1}`;
-                const isAlreadyInList = true; // headers list already includes it
-            }
-            return `
-                <div class="price-mapping-item">
-                    <label>${pf.label}</label>
-                    <select class="price-mapping-select" data-store="${sid}" data-field="${pf.field}">${opts.join("")}</select>
-                </div>
-            `;
-        }).join("");
-        priceMappingHtml = `<div class="price-mapping-grid">${items}</div>`;
-    }
+    // Category/Subcategory column mapping (shared columns but shown per-store for context)
+    const catSubHtml = `
+        <div class="price-mapping-grid">
+            ${buildColumnSelect("CateName", "Category")}
+            ${buildColumnSelect("SubCateName", "Subcategory")}
+        </div>
+    `;
 
-    let categoryHtml = "";
+    // Category match results
+    let categoryMatchHtml = "";
     const matchData = state.categoryMatches[sid];
-    if (matchData && matchData.subcategories) {
+    if (matchData && matchData.subcategories && Object.keys(matchData.subcategories).length) {
         const subs = matchData.subcategories;
         const allSubs = matchData.all_subcategories || [];
         const items = Object.entries(subs).map(([text, info]) => {
@@ -582,14 +609,31 @@ function renderStorePanel(storeId) {
                 `;
             }
         }).join("");
-        categoryHtml = `
-            <div class="import-subsection">
-                <div class="import-subsection-label">
-                    <span class="material-icons-round" style="font-size:16px">category</span> Category Matching
+        categoryMatchHtml = `<div class="category-match-list" style="margin-top:var(--md-spacing-sm)">${items}</div>`;
+    } else if (state.columnMapping.SubCateName !== undefined) {
+        categoryMatchHtml = `<p class="text-sm text-muted" style="margin-top:var(--md-spacing-sm)">No subcategory values found in file.</p>`;
+    }
+
+    // Price mapping
+    let priceMappingHtml = "";
+    if (mode === "excel") {
+        const items = PRICE_FIELDS.map(pf => {
+            const currentMap = (state.priceMapping[sid] || {})[pf.field] || "";
+            const opts = [`<option value="">-- Not mapped (use default) --</option>`];
+            state.headers.forEach((h, i) => {
+                const sel = currentMap === String(i) ? "selected" : "";
+                opts.push(`<option value="${i}" ${sel}>${escapeHtml(h)} (Col ${i + 1})</option>`);
+            });
+            return `
+                <div class="price-mapping-item">
+                    <label>${pf.label}</label>
+                    <select class="price-mapping-select" data-store="${sid}" data-field="${pf.field}">${opts.join("")}</select>
                 </div>
-                <div class="category-match-list">${items}</div>
-            </div>
-        `;
+            `;
+        }).join("");
+        priceMappingHtml = `<div class="price-mapping-grid">${items}</div>`;
+    } else {
+        priceMappingHtml = `<p class="text-sm text-muted">Prices will be calculated from formulas in Settings${hasFormulas ? "" : " (no formulas configured — defaults apply)"}.</p>`;
     }
 
     return `
@@ -603,6 +647,13 @@ function renderStorePanel(storeId) {
             <div class="import-store-panel-body">
                 <div class="import-subsection">
                     <div class="import-subsection-label">
+                        <span class="material-icons-round" style="font-size:16px">category</span> Category / Subcategory
+                    </div>
+                    ${catSubHtml}
+                    ${categoryMatchHtml}
+                </div>
+                <div class="import-subsection" style="margin-top:var(--md-spacing-md)">
+                    <div class="import-subsection-label">
                         <span class="material-icons-round" style="font-size:16px">attach_money</span> Pricing
                     </div>
                     <div class="price-mode-toggle">
@@ -612,12 +663,11 @@ function renderStorePanel(storeId) {
                         </label>
                         <label>
                             <input type="radio" name="price-mode-${sid}" value="formula" ${mode === "formula" ? "checked" : ""}>
-                            Use price formulas${hasFormulas ? "" : " (none configured)"}
+                            Use price formulas
                         </label>
                     </div>
                     ${priceMappingHtml}
                 </div>
-                ${categoryHtml}
             </div>
         </div>
     `;
