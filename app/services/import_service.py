@@ -417,7 +417,19 @@ def execute_import(rows, store_ids, category_assignments, price_mode, store_mapp
             "batch_id": batch_id,
         }
 
-        result = insert_item(data)
+        try:
+            result = insert_item(data)
+        except Exception as e:
+            failed += 1
+            results.append({
+                "row_index": idx,
+                "upc": row.get("ProductUPC", ""),
+                "description": row.get("ProductDescription", ""),
+                "status": "failed",
+                "errors": [{"field": "general", "error": str(e)}],
+                "results": [],
+            })
+            continue
 
         if result["success"]:
             succeeded += 1

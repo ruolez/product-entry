@@ -81,7 +81,10 @@ def match_cats():
     if not rows:
         return jsonify({"error": "No data rows found"}), 400
 
-    result = match_categories(store_ids, rows)
+    try:
+        result = match_categories(store_ids, rows)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
     return jsonify(result)
 
 
@@ -112,7 +115,10 @@ def validate():
     for sid, mapping in store_mappings.items():
         int_store_mappings[sid] = {k: int(v) for k, v in mapping.items()}
 
-    results = validate_batch(rows, store_ids, category_assignments, int_store_mappings)
+    try:
+        results = validate_batch(rows, store_ids, category_assignments, int_store_mappings)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
     valid_count = sum(1 for r in results if r["status"] == "valid")
     duplicate_count = sum(1 for r in results if r["status"] == "duplicate")
@@ -156,10 +162,13 @@ def execute():
     for sid, mapping in store_mappings.items():
         int_store_mappings[sid] = {k: int(v) for k, v in mapping.items()}
 
-    result = execute_import(
-        rows, store_ids, category_assignments,
-        price_mode, int_store_mappings, skip_rows,
-    )
+    try:
+        result = execute_import(
+            rows, store_ids, category_assignments,
+            price_mode, int_store_mappings, skip_rows,
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
     cleanup_upload(upload_id)
 
