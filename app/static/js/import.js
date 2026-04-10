@@ -113,6 +113,7 @@ function seedStoreMappingsFromAuto() {
 
 function closeModal() {
     _pollingActive = false;
+    _importRunning = false;
     if (modalEl) {
         modalEl.remove();
         modalEl = null;
@@ -874,7 +875,11 @@ function renderValidationReport(content, footer) {
     const nextBtn = footer.querySelector("#import-next");
     nextBtn.disabled = importableCount === 0;
     footer.querySelector("#import-back").addEventListener("click", () => renderStep(3));
-    nextBtn.addEventListener("click", () => renderStep(5));
+    nextBtn.addEventListener("click", () => {
+        nextBtn.disabled = true;
+        nextBtn.textContent = "Starting...";
+        renderStep(5);
+    });
 
     content.querySelectorAll(".skip-check").forEach(cb => {
         cb.addEventListener("change", (e) => {
@@ -894,6 +899,9 @@ function renderValidationReport(content, footer) {
 // ── Step 5: Execute & Results ─────────────────────────────
 
 async function renderExecuteStep(content, footer) {
+    if (_importRunning) return;
+    _importRunning = true;
+
     footer.innerHTML = `
         <div class="import-footer-left"></div>
         <div class="import-footer-right">
@@ -934,6 +942,7 @@ async function renderExecuteStep(content, footer) {
 }
 
 let _pollingActive = false;
+let _importRunning = false;
 
 async function pollImportProgress(batchId, content, footer) {
     _pollingActive = true;
