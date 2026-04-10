@@ -118,7 +118,7 @@ function createModal() {
     document.body.appendChild(modalEl);
 
     modalEl.querySelector("#import-close").addEventListener("click", closeModal);
-    modalEl.querySelector(".import-overlay").addEventListener("click", (e) => {
+    modalEl.addEventListener("click", (e) => {
         if (e.target === modalEl) closeModal();
     });
 }
