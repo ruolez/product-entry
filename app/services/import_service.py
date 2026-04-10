@@ -70,16 +70,23 @@ def store_upload(file_bytes):
 
 def get_upload(upload_id):
     entry = _file_cache.get(upload_id)
-    if not entry or not os.path.exists(entry["path"]):
-        return None
-    with open(entry["path"], "rb") as f:
-        return f.read()
+    if entry and os.path.exists(entry["path"]):
+        with open(entry["path"], "rb") as f:
+            return f.read()
+    # Fallback: look on disk (handles multi-worker / restart scenarios)
+    path = os.path.join(UPLOAD_DIR, f"import_{upload_id}.xlsx")
+    if os.path.exists(path):
+        _file_cache[upload_id] = {"path": path}
+        with open(path, "rb") as f:
+            return f.read()
+    return None
 
 
 def cleanup_upload(upload_id):
     entry = _file_cache.pop(upload_id, None)
-    if entry and os.path.exists(entry.get("path", "")):
-        os.remove(entry["path"])
+    path = entry["path"] if entry else os.path.join(UPLOAD_DIR, f"import_{upload_id}.xlsx")
+    if os.path.exists(path):
+        os.remove(path)
 
 
 def detect_columns(headers):
