@@ -143,7 +143,10 @@ def extract_rows_with_mapping(file_bytes, sheet_name, column_mapping):
         for field_name, col_idx in column_mapping.items():
             if col_idx < len(raw_row):
                 val = raw_row[col_idx]
-                row_dict[field_name] = str(val).strip() if val is not None else ""
+                val = str(val).strip() if val is not None else ""
+                if field_name == "ProductDescription":
+                    val = val[:50]
+                row_dict[field_name] = val
             else:
                 row_dict[field_name] = ""
         # Store raw column values for per-store price lookups
@@ -266,8 +269,6 @@ def validate_batch(rows, store_ids, category_assignments, store_mappings=None):
             errors.append({"field": "ProductUPC", "error": "UPC exceeds 20 characters"})
         if sku and len(sku) > 20:
             errors.append({"field": "ProductSKU", "error": "SKU exceeds 20 characters"})
-        if desc and len(desc) > 50:
-            errors.append({"field": "ProductDescription", "error": "Description exceeds 50 characters"})
 
         if upc and upc_counts.get(upc, 0) > 1:
             errors.append({"field": "ProductUPC", "error": "Duplicate UPC within this import file"})
