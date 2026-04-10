@@ -446,10 +446,19 @@ def _execute_import(batch_id, rows, store_ids, category_assignments, price_mode,
                 continue
             if key.startswith("_"):
                 continue
-            if key in price_field_names and any_store_uses_formula:
+            # Skip price fields from row dict — they come from per-store mappings
+            if key in price_field_names:
                 continue
             if val is not None and val != "":
                 common_fields[key] = val
+
+        # For required-field validation to pass, add price placeholders to
+        # common_fields from the first store's per-store prices
+        first_sid = str(store_ids[0])
+        first_store_prices = per_store_fields.get(first_sid, {})
+        for pf in ("UnitCost", "UnitPrice"):
+            if pf not in common_fields and pf in first_store_prices:
+                common_fields[pf] = first_store_prices[pf]
 
         data = {
             "store_ids": store_ids,
