@@ -54,6 +54,7 @@ let state = {
     categoryAssignments: {},
     priceMode: {},
     priceMapping: {},
+    storeMappings: {},
     validationResults: null,
     skipRows: new Set(),
     importResult: null,
@@ -88,12 +89,32 @@ function resetState() {
     state.categoryAssignments = {};
     state.priceMode = {};
     state.priceMapping = {};
+    state.storeMappings = {};
     state.validationResults = null;
     state.skipRows = new Set();
     state.importResult = null;
 
     for (const store of state.stores) {
-        state.priceMode[String(store.id)] = "formula";
+        const sid = String(store.id);
+        state.priceMode[sid] = "formula";
+        state.storeMappings[sid] = {};
+    }
+}
+
+function seedStoreMappingsFromAuto() {
+    const perStoreFields = ["CateName", "SubCateName", "UnitCost", "UnitPrice", "UnitPriceA", "UnitPriceB", "UnitPriceC", "MSRPrice"];
+    for (const store of state.stores) {
+        const sid = String(store.id);
+        if (!state.storeMappings[sid]) state.storeMappings[sid] = {};
+        for (const field of perStoreFields) {
+            if (state.columnMapping[field] !== undefined && state.storeMappings[sid][field] === undefined) {
+                state.storeMappings[sid][field] = state.columnMapping[field];
+            }
+        }
+    }
+    // Remove per-store fields from global mapping (they live in storeMappings now)
+    for (const field of perStoreFields) {
+        delete state.columnMapping[field];
     }
 }
 
@@ -228,6 +249,7 @@ async function handleFileUpload(file) {
         state.previewRows = data.preview_rows || [];
         state.totalRows = data.total_rows || 0;
         state.columnMapping = data.auto_mapping || {};
+        seedStoreMappingsFromAuto();
 
         showFileResult(content);
         modalEl.querySelector("#import-next").disabled = false;
@@ -276,6 +298,7 @@ function showFileResult(content) {
                 state.previewRows = data.preview_rows || [];
                 state.totalRows = data.total_rows || 0;
                 state.columnMapping = data.auto_mapping || {};
+                seedStoreMappingsFromAuto();
                 showFileResult(content);
             } catch (err) {
                 showToast(err.message || "Failed to load sheet", "error");
@@ -378,6 +401,7 @@ function buildPreviewTable(mappedIndices) {
 // ── Step 3: Store Selection & Price/Category Config ───────
 
 async function renderStoreStep(content, footer) {
+    content.innerHTML = `<div class="import-loading"><div class="spinner"></div><p>Loading store data...</p></div>`;
     footer.innerHTML = `
         <div class="import-footer-left">
             <button class="btn btn-secondary" id="import-back">Back</button>
@@ -388,44 +412,69 @@ async function renderStoreStep(content, footer) {
     `;
     footer.querySelector("#import-back").addEventListener("click", () => renderStep(2));
 
+    // Ensure all stores have storeMappings initialized
+    for (const sid of state.selectedStoreIds) {
+        const s = String(sid);
+        if (!state.storeMappings[s]) state.storeMappings[s] = {};
+    }
+
+    // Fetch category matches for stores that have subcategory columns mapped
+    await fetchAllCategoryMatches();
+
     renderStoreStepContent(content, footer);
 }
 
-function initCategoryAssignments() {
-    for (const [sid, matchData] of Object.entries(state.categoryMatches)) {
-        if (!state.categoryAssignments[sid]) {
-            state.categoryAssignments[sid] = {};
-        }
-        const subs = matchData.subcategories || {};
-        for (const [text, info] of Object.entries(subs)) {
-            if (info.matched && !state.categoryAssignments[sid][text]) {
-                state.categoryAssignments[sid][text] = {
-                    SubCateID: info.SubCateID,
-                    CateID: info.CateID,
-                };
-            }
+function initCategoryAssignmentsForStore(sid) {
+    const matchData = state.categoryMatches[sid];
+    if (!matchData) return;
+    if (!state.categoryAssignments[sid]) {
+        state.categoryAssignments[sid] = {};
+    }
+    const subs = matchData.subcategories || {};
+    for (const [text, info] of Object.entries(subs)) {
+        if (info.matched && !state.categoryAssignments[sid][text]) {
+            state.categoryAssignments[sid][text] = {
+                SubCateID: info.SubCateID,
+                CateID: info.CateID,
+            };
         }
     }
 }
 
-async function fetchCategoryMatches() {
-    const hasCatMapping = state.columnMapping.SubCateName !== undefined;
-    if (!hasCatMapping || !state.selectedStoreIds.length) {
-        state.categoryMatches = {};
+async function fetchCategoryMatchesForStore(sid) {
+    const storeMap = state.storeMappings[sid] || {};
+    if (storeMap.SubCateName === undefined) {
+        delete state.categoryMatches[sid];
         return;
     }
+    // Build a column mapping that includes SubCateName (and CateName if mapped)
+    const mapping = { ...state.columnMapping };
+    if (storeMap.CateName !== undefined) mapping.CateName = storeMap.CateName;
+    if (storeMap.SubCateName !== undefined) mapping.SubCateName = storeMap.SubCateName;
+
     try {
         const data = await api.post("/api/import/match-categories", {
             upload_id: state.uploadId,
-            store_ids: state.selectedStoreIds,
-            column_mapping: state.columnMapping,
+            store_ids: [parseInt(sid)],
+            column_mapping: mapping,
             sheet_name: state.activeSheet,
         });
-        state.categoryMatches = data;
-        initCategoryAssignments();
+        state.categoryMatches[sid] = data[sid];
+        initCategoryAssignmentsForStore(sid);
     } catch (err) {
         showToast(err.message || "Failed to match categories", "error");
     }
+}
+
+async function fetchAllCategoryMatches() {
+    const promises = [];
+    for (const storeId of state.selectedStoreIds) {
+        const sid = String(storeId);
+        if (!state.categoryMatches[sid]) {
+            promises.push(fetchCategoryMatchesForStore(sid));
+        }
+    }
+    if (promises.length) await Promise.all(promises);
 }
 
 function renderStoreStepContent(content, footer) {
@@ -480,33 +529,24 @@ function renderStoreStepContent(content, footer) {
         });
     });
 
-    content.querySelectorAll(".price-mapping-select").forEach(sel => {
-        sel.addEventListener("change", (e) => {
-            const sid = e.target.dataset.store;
-            const field = e.target.dataset.field;
-            if (!state.priceMapping[sid]) state.priceMapping[sid] = {};
-            if (e.target.value === "") {
-                delete state.priceMapping[sid][field];
-            } else {
-                state.priceMapping[sid][field] = e.target.value;
-            }
-        });
-    });
-
-    // Per-store category/subcategory column mapping selects
+    // Per-store column mapping selects (category, subcategory, prices)
     content.querySelectorAll(".store-col-mapping-select").forEach(sel => {
         sel.addEventListener("change", async (e) => {
+            const sid = e.target.dataset.store;
             const field = e.target.dataset.field;
             const val = e.target.value;
+            if (!state.storeMappings[sid]) state.storeMappings[sid] = {};
             if (val === "") {
-                delete state.columnMapping[field];
+                delete state.storeMappings[sid][field];
             } else {
-                state.columnMapping[field] = parseInt(val);
+                state.storeMappings[sid][field] = parseInt(val);
             }
-            // Re-fetch category matches with updated mapping
-            state.categoryMatches = {};
-            state.categoryAssignments = {};
-            await fetchCategoryMatches();
+            // Re-fetch category matches if category/subcategory changed
+            if (field === "CateName" || field === "SubCateName") {
+                delete state.categoryMatches[sid];
+                delete state.categoryAssignments[sid];
+                await fetchCategoryMatchesForStore(sid);
+            }
             renderStoreStepContent(content, footer);
         });
     });
@@ -530,23 +570,28 @@ function renderStoreStepContent(content, footer) {
         });
     });
 
-    content.querySelector("#import-copy-store")?.addEventListener("click", () => {
+    content.querySelector("#import-copy-store")?.addEventListener("click", async () => {
         if (!state.selectedStoreIds.length) return;
         const firstSid = String(state.selectedStoreIds[0]);
         const firstMode = state.priceMode[firstSid] || "formula";
-        const firstMapping = state.priceMapping[firstSid] || {};
+        const firstStoreMap = state.storeMappings[firstSid] || {};
         for (const sid of state.selectedStoreIds) {
             const s = String(sid);
             state.priceMode[s] = firstMode;
-            state.priceMapping[s] = { ...firstMapping };
+            state.storeMappings[s] = { ...firstStoreMap };
         }
+        // Re-fetch category matches for all stores with new mappings
+        state.categoryMatches = {};
+        state.categoryAssignments = {};
+        await fetchAllCategoryMatches();
         renderStoreStepContent(content, footer);
         showToast("Settings copied to all stores", "info");
     });
 }
 
-function buildColumnSelect(field, label) {
-    const currentIdx = state.columnMapping[field];
+function buildColumnSelect(sid, field, label) {
+    const storeMap = state.storeMappings[sid] || {};
+    const currentIdx = storeMap[field];
     const opts = [`<option value="">-- Not mapped (use default) --</option>`];
     state.headers.forEach((h, i) => {
         const sel = currentIdx === i ? "selected" : "";
@@ -555,7 +600,7 @@ function buildColumnSelect(field, label) {
     return `
         <div class="price-mapping-item">
             <label>${label}</label>
-            <select class="store-col-mapping-select" data-field="${field}">${opts.join("")}</select>
+            <select class="store-col-mapping-select" data-store="${sid}" data-field="${field}">${opts.join("")}</select>
         </div>
     `;
 }
@@ -568,11 +613,11 @@ function renderStorePanel(storeId) {
     const mode = state.priceMode[sid] || "formula";
     const hasFormulas = state.priceFormulas[sid] && state.priceFormulas[sid].length > 0;
 
-    // Category/Subcategory column mapping (shared columns but shown per-store for context)
+    // Category/Subcategory column mapping (per-store)
     const catSubHtml = `
         <div class="price-mapping-grid">
-            ${buildColumnSelect("CateName", "Category")}
-            ${buildColumnSelect("SubCateName", "Subcategory")}
+            ${buildColumnSelect(sid, "CateName", "Category")}
+            ${buildColumnSelect(sid, "SubCateName", "Subcategory")}
         </div>
     `;
 
@@ -618,16 +663,17 @@ function renderStorePanel(storeId) {
     let priceMappingHtml = "";
     if (mode === "excel") {
         const items = PRICE_FIELDS.map(pf => {
-            const currentMap = (state.priceMapping[sid] || {})[pf.field] || "";
+            const storeMap = state.storeMappings[sid] || {};
+            const currentIdx = storeMap[pf.field];
             const opts = [`<option value="">-- Not mapped (use default) --</option>`];
             state.headers.forEach((h, i) => {
-                const sel = currentMap === String(i) ? "selected" : "";
+                const sel = currentIdx === i ? "selected" : "";
                 opts.push(`<option value="${i}" ${sel}>${escapeHtml(h)} (Col ${i + 1})</option>`);
             });
             return `
                 <div class="price-mapping-item">
                     <label>${pf.label}</label>
-                    <select class="price-mapping-select" data-store="${sid}" data-field="${pf.field}">${opts.join("")}</select>
+                    <select class="store-col-mapping-select" data-store="${sid}" data-field="${pf.field}">${opts.join("")}</select>
                 </div>
             `;
         }).join("");
@@ -711,6 +757,7 @@ async function renderValidationStep(content, footer) {
             upload_id: state.uploadId,
             store_ids: state.selectedStoreIds,
             column_mapping: state.columnMapping,
+            store_mappings: state.storeMappings,
             category_assignments: mergedAssignments,
             sheet_name: state.activeSheet,
         });
@@ -864,24 +911,13 @@ async function renderExecuteStep(content, footer) {
     try {
         const mergedAssignments = buildMergedAssignments();
 
-        // Build price mapping: convert col indices to field keys the backend can use
-        const priceMappingForBackend = {};
-        for (const [sid, mapping] of Object.entries(state.priceMapping)) {
-            priceMappingForBackend[sid] = {};
-            for (const [field, colIdx] of Object.entries(mapping)) {
-                // The backend will look up the value from the row using the mapped field name
-                // We need to tell it which column maps to which price field
-                priceMappingForBackend[sid][field] = colIdx;
-            }
-        }
-
         const data = await api.post("/api/import/execute", {
             upload_id: state.uploadId,
             store_ids: state.selectedStoreIds,
             column_mapping: state.columnMapping,
+            store_mappings: state.storeMappings,
             category_assignments: mergedAssignments,
             price_mode: state.priceMode,
-            price_mapping: priceMappingForBackend,
             skip_rows: Array.from(state.skipRows),
             sheet_name: state.activeSheet,
         });

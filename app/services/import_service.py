@@ -214,7 +214,19 @@ def match_categories(store_ids, rows):
     return results
 
 
-def validate_batch(rows, store_ids, category_assignments):
+def _get_raw_value(row, store_mappings, sid, field):
+    """Get a field value from per-store column mapping via _raw, or fall back to row dict."""
+    sm = store_mappings.get(sid, {})
+    col_idx = sm.get(field)
+    if col_idx is not None:
+        raw = row.get("_raw", [])
+        return raw[col_idx].strip() if col_idx < len(raw) else ""
+    return row.get(field, "").strip()
+
+
+def validate_batch(rows, store_ids, category_assignments, store_mappings=None):
+    if store_mappings is None:
+        store_mappings = {}
     all_upcs = [r.get("ProductUPC", "").strip() for r in rows if r.get("ProductUPC", "").strip()]
     all_skus = [r.get("ProductSKU", "").strip() for r in rows if r.get("ProductSKU", "").strip()]
 
@@ -307,7 +319,7 @@ def validate_batch(rows, store_ids, category_assignments):
 
         for store_id in store_ids:
             sid = str(store_id)
-            sub_text = row.get("SubCateName", "").strip()
+            sub_text = _get_raw_value(row, store_mappings, sid, "SubCateName")
             if sub_text:
                 store_cats = category_assignments.get(sid, {})
                 sub_match = store_cats.get(sub_text, {})
@@ -336,7 +348,7 @@ def validate_batch(rows, store_ids, category_assignments):
     return results
 
 
-def execute_import(rows, store_ids, category_assignments, price_mode, price_mapping, skip_rows):
+def execute_import(rows, store_ids, category_assignments, price_mode, store_mappings, skip_rows):
     batch_id = str(uuid.uuid4())
     results = []
     succeeded = 0
@@ -366,29 +378,32 @@ def execute_import(rows, store_ids, category_assignments, price_mode, price_mapp
         for store_id in store_ids:
             sid = str(store_id)
             store_fields = {}
+            sm = store_mappings.get(sid, {})
+            raw = row.get("_raw", [])
 
-            sub_text = row.get("SubCateName", "").strip()
+            # Category/Subcategory from per-store column mapping
+            sub_text = _get_raw_value(row, store_mappings, sid, "SubCateName")
             if sub_text:
                 cat_data = category_assignments.get(sid, {}).get(sub_text, {})
                 if cat_data.get("SubCateID"):
                     store_fields["CateID"] = cat_data["CateID"]
                     store_fields["SubCateID"] = cat_data["SubCateID"]
 
+            # Prices from per-store column mapping
             store_price_mode = price_mode.get(sid, "formula")
             if store_price_mode == "excel":
-                store_price_map = price_mapping.get(sid, {})
-                raw = row.get("_raw", [])
-                for price_field, col_idx in store_price_map.items():
-                    try:
-                        ci = int(col_idx)
-                        val = raw[ci] if ci < len(raw) else ""
-                    except (ValueError, IndexError):
-                        val = ""
-                    if val is not None and val != "":
+                for price_field in ("UnitCost", "UnitPrice", "UnitPriceA", "UnitPriceB", "UnitPriceC", "MSRPrice"):
+                    col_idx = sm.get(price_field)
+                    if col_idx is not None:
                         try:
-                            store_fields[price_field] = float(val)
-                        except (ValueError, TypeError):
-                            pass
+                            val = raw[col_idx] if col_idx < len(raw) else ""
+                        except (IndexError):
+                            val = ""
+                        if val is not None and val != "":
+                            try:
+                                store_fields[price_field] = float(val)
+                            except (ValueError, TypeError):
+                                pass
 
             if store_fields:
                 per_store_fields[sid] = store_fields
@@ -406,24 +421,6 @@ def execute_import(rows, store_ids, category_assignments, price_mode, price_mapp
                 continue
             if val is not None and val != "":
                 common_fields[key] = val
-
-        # For stores using "excel" mode without per-store mapping,
-        # add global price values to per_store_fields
-        if any_store_uses_formula:
-            for store_id in store_ids:
-                sid = str(store_id)
-                if price_mode.get(sid, "formula") == "excel":
-                    if sid not in per_store_fields:
-                        per_store_fields[sid] = {}
-                    store_price_map = price_mapping.get(sid, {})
-                    if not store_price_map:
-                        for pf in price_field_names:
-                            val = row.get(pf, "")
-                            if val is not None and val != "":
-                                try:
-                                    per_store_fields[sid][pf] = float(val)
-                                except (ValueError, TypeError):
-                                    pass
 
         data = {
             "store_ids": store_ids,

@@ -91,11 +91,12 @@ def validate():
     upload_id = data.get("upload_id")
     store_ids = data.get("store_ids", [])
     column_mapping = data.get("column_mapping", {})
+    store_mappings = data.get("store_mappings", {})
     category_assignments = data.get("category_assignments", {})
     sheet_name = data.get("sheet_name")
 
-    if not upload_id or not store_ids or not column_mapping:
-        return jsonify({"error": "upload_id, store_ids, and column_mapping required"}), 400
+    if not upload_id or not store_ids:
+        return jsonify({"error": "upload_id and store_ids required"}), 400
 
     file_bytes = get_upload(upload_id)
     if not file_bytes:
@@ -107,7 +108,11 @@ def validate():
     if not rows:
         return jsonify({"error": "No data rows found"}), 400
 
-    results = validate_batch(rows, store_ids, category_assignments)
+    int_store_mappings = {}
+    for sid, mapping in store_mappings.items():
+        int_store_mappings[sid] = {k: int(v) for k, v in mapping.items()}
+
+    results = validate_batch(rows, store_ids, category_assignments, int_store_mappings)
 
     valid_count = sum(1 for r in results if r["status"] == "valid")
     duplicate_count = sum(1 for r in results if r["status"] == "duplicate")
@@ -128,14 +133,14 @@ def execute():
     upload_id = data.get("upload_id")
     store_ids = data.get("store_ids", [])
     column_mapping = data.get("column_mapping", {})
+    store_mappings = data.get("store_mappings", {})
     category_assignments = data.get("category_assignments", {})
     price_mode = data.get("price_mode", {})
-    price_mapping = data.get("price_mapping", {})
     skip_rows = data.get("skip_rows", [])
     sheet_name = data.get("sheet_name")
 
-    if not upload_id or not store_ids or not column_mapping:
-        return jsonify({"error": "upload_id, store_ids, and column_mapping required"}), 400
+    if not upload_id or not store_ids:
+        return jsonify({"error": "upload_id and store_ids required"}), 400
 
     file_bytes = get_upload(upload_id)
     if not file_bytes:
@@ -147,9 +152,13 @@ def execute():
     if not rows:
         return jsonify({"error": "No data rows found"}), 400
 
+    int_store_mappings = {}
+    for sid, mapping in store_mappings.items():
+        int_store_mappings[sid] = {k: int(v) for k, v in mapping.items()}
+
     result = execute_import(
         rows, store_ids, category_assignments,
-        price_mode, price_mapping, skip_rows,
+        price_mode, int_store_mappings, skip_rows,
     )
 
     cleanup_upload(upload_id)
