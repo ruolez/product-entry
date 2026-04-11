@@ -372,13 +372,11 @@ def get_import_status(batch_id):
 
 def start_import(app, rows, store_ids, category_assignments, price_mode, store_mappings, skip_rows, upload_id):
     batch_id = str(uuid.uuid4())
-    importable = len([i for i in range(len(rows)) if i not in set(skip_rows or [])])
-    total_ops = importable * len(store_ids)
+    skip_set = set(skip_rows or [])
+    importable = sum(1 for i in range(len(rows)) if i not in skip_set)
     _save_progress(batch_id, {
         "status": "running",
-        "total_rows": len(rows),
-        "total_stores": len(store_ids),
-        "total": total_ops,
+        "total": importable,
         "processed": 0,
         "succeeded": 0,
         "failed": 0,
@@ -490,8 +488,8 @@ def _execute_import(batch_id, rows, store_ids, category_assignments, price_mode,
         try:
             result = insert_item(data)
         except Exception as e:
-            progress["failed"] += len(store_ids)
-            progress["processed"] += len(store_ids)
+            progress["failed"] += 1
+            progress["processed"] += 1
             progress["results"].append({
                 "row_index": idx,
                 "upc": row.get("ProductUPC", ""),
@@ -503,12 +501,11 @@ def _execute_import(batch_id, rows, store_ids, category_assignments, price_mode,
             _update_progress()
             continue
 
-        store_results = result.get("results", [])
-        store_succeeded = sum(1 for r in store_results if r.get("success"))
-        store_failed = len(store_results) - store_succeeded
-        progress["succeeded"] += store_succeeded
-        progress["failed"] += store_failed
-        progress["processed"] += len(store_results)
+        progress["processed"] += 1
+        if result["success"]:
+            progress["succeeded"] += 1
+        else:
+            progress["failed"] += 1
 
         row_status = "success" if result["success"] else "failed"
         progress["results"].append({
@@ -517,7 +514,7 @@ def _execute_import(batch_id, rows, store_ids, category_assignments, price_mode,
             "description": row.get("ProductDescription", ""),
             "status": row_status,
             "errors": result.get("errors", []),
-            "results": store_results,
+            "results": result.get("results", []),
         })
         _update_progress()
 
