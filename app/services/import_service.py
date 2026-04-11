@@ -13,7 +13,7 @@ from services.lookup_service import get_all_subcategories
 from services.item_service import insert_item, get_field_configs
 
 
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "import_tmp")
+UPLOAD_DIR = "/tmp/item_entry_import"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 _file_cache = {}
 _progress_lock = threading.Lock()

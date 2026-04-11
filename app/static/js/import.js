@@ -527,6 +527,7 @@ function renderStoreStepContent(content, footer) {
     // Per-store column mapping selects (category, subcategory, prices)
     content.querySelectorAll(".store-col-mapping-select").forEach(sel => {
         sel.addEventListener("change", async (e) => {
+            if (state.currentStep !== 3) return;
             const sid = e.target.dataset.store;
             const field = e.target.dataset.field;
             const val = e.target.value;
@@ -542,6 +543,7 @@ function renderStoreStepContent(content, footer) {
                 delete state.categoryAssignments[sid];
                 await fetchCategoryMatchesForStore(sid);
             }
+            if (state.currentStep !== 3) return;
             renderStoreStepContent(content, footer);
         });
     });
@@ -566,7 +568,7 @@ function renderStoreStepContent(content, footer) {
     });
 
     content.querySelector("#import-copy-store")?.addEventListener("click", async () => {
-        if (!state.selectedStoreIds.length) return;
+        if (state.currentStep !== 3 || !state.selectedStoreIds.length) return;
         const firstSid = String(state.selectedStoreIds[0]);
         const firstMode = state.priceMode[firstSid] || "formula";
         const firstStoreMap = state.storeMappings[firstSid] || {};
@@ -935,9 +937,10 @@ async function renderExecuteStep(content, footer) {
         const batchId = startData.batch_id;
         await pollImportProgress(batchId, content, footer);
     } catch (err) {
-        content.innerHTML = `<p class="text-error">Import failed: ${escapeHtml(err.message)}</p>`;
+        if (content) content.innerHTML = `<p class="text-error">Import failed: ${escapeHtml(err.message)}</p>`;
         showToast(err.message || "Import failed", "error");
-        footer.querySelector("#import-done").style.display = "";
+        const doneBtn = footer?.querySelector("#import-done");
+        if (doneBtn) doneBtn.style.display = "";
     }
 }
 
@@ -987,12 +990,14 @@ async function pollImportProgress(batchId, content, footer) {
 }
 
 function renderFinalSummary(content, footer, data) {
+    if (!content || !footer) return;
     const progressFill = content.querySelector("#import-progress-fill");
     const progressText = content.querySelector("#import-progress-text");
     if (progressFill) progressFill.style.width = "100%";
     if (progressText) progressText.textContent = "Import complete!";
 
     const resultsArea = content.querySelector("#import-results-area");
+    if (!resultsArea) return;
 
     const detailRows = (data.results || [])
         .filter(r => r.status !== "skipped")
