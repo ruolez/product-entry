@@ -282,8 +282,11 @@ _BARCODE_LOOKUP_QUERY = """
       tags
       templateSuffix
       seo { title description }
-      metafields(first: 50) {
-        nodes { namespace key type value }
+      metafields(first: 250) {
+        nodes {
+          namespace key type value
+          definition { pinnedPosition }
+        }
       }
       collections(first: 50) {
         nodes { id title }
@@ -413,18 +416,27 @@ def _normalize_lookup_result(product, variant, all_variants=None):
             "description": seo.get("description", ""),
         }
 
-    metafields_nodes = product.get("metafields", {}).get("nodes", [])
-    if metafields_nodes:
-        result["metafields"] = [
-            {
-                "namespace": mf.get("namespace", "custom"),
-                "key": mf.get("key", ""),
-                "type": mf.get("type", "single_line_text_field"),
-                "value": mf.get("value", ""),
-            }
-            for mf in metafields_nodes
-            if mf.get("key")
-        ]
+    # Keep only pinned metafields (those backed by a pinned definition in this
+    # store). Unstructured metafields have no definition; unpinned definitions
+    # have a null pinnedPosition. Each store's query runs against that store, so
+    # this yields that store's own pinned set, ordered as in the Shopify admin.
+    pinned_metafields = []
+    for mf in product.get("metafields", {}).get("nodes", []):
+        if not mf.get("key"):
+            continue
+        definition = mf.get("definition")
+        pinned_position = definition.get("pinnedPosition") if definition else None
+        if pinned_position is None:
+            continue
+        pinned_metafields.append((pinned_position, {
+            "namespace": mf.get("namespace", "custom"),
+            "key": mf.get("key", ""),
+            "type": mf.get("type", "single_line_text_field"),
+            "value": mf.get("value", ""),
+        }))
+    if pinned_metafields:
+        pinned_metafields.sort(key=lambda item: item[0])
+        result["metafields"] = [mf for _, mf in pinned_metafields]
 
     collections_nodes = product.get("collections", {}).get("nodes", [])
     if collections_nodes:
@@ -583,8 +595,11 @@ query getProduct($id: ID!) {
     tags
     templateSuffix
     seo { title description }
-    metafields(first: 50) {
-      nodes { namespace key type value }
+    metafields(first: 250) {
+      nodes {
+        namespace key type value
+        definition { pinnedPosition }
+      }
     }
     collections(first: 50) {
       nodes { id title }
