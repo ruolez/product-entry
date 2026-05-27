@@ -13,6 +13,7 @@ services:
     build: ./app
     volumes:
       - ./app:/app
+      - ./postgres/migrations:/app/migrations:ro
     env_file:
       - .env
     depends_on:

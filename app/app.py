@@ -1,5 +1,8 @@
+import os
+
 from flask import Flask
 from config import Config
+from migrate import run_migrations
 from models.settings import db
 
 
@@ -8,6 +11,11 @@ def create_app():
     app.config.from_object(Config)
 
     db.init_app(app)
+
+    run_migrations(
+        app.config["SQLALCHEMY_DATABASE_URI"],
+        os.environ.get("MIGRATIONS_DIR", "/app/migrations"),
+    )
 
     from routes.pages import pages_bp
     from routes.api import api_bp

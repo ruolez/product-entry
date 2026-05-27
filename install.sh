@@ -176,6 +176,8 @@ services:
     build:
       context: ./app
       dockerfile: Dockerfile.prod
+    volumes:
+      - ./postgres/migrations:/app/migrations:ro
     env_file:
       - .env
     depends_on:
@@ -661,20 +663,21 @@ Proceed?" \
             psql -U itementry -d itementry -c \
             "CREATE TABLE IF NOT EXISTS schema_migrations (id SERIAL PRIMARY KEY, filename VARCHAR(255) NOT NULL UNIQUE, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());" \
             >> "$LOG" 2>&1 || true
-        # Apply each migration file that hasn't been run yet
+        # Apply every migration file (all are idempotent) with ON_ERROR_STOP so a
+        # failed apply is visible, and record it as applied ONLY on success. This
+        # prevents schema_migrations from claiming a migration ran when it did not.
         if [ -d "${INSTALL_DIR}/postgres/migrations" ]; then
             for mig in $(ls "${INSTALL_DIR}/postgres/migrations/"*.sql 2>/dev/null | sort); do
                 local mig_name
                 mig_name=$(basename "$mig")
-                local already_applied
-                already_applied=$($DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
-                    psql -U itementry -d itementry -t -c "SELECT count(*) FROM schema_migrations WHERE filename = '${mig_name}';" 2>/dev/null | tr -d ' ')
-                if [ "$already_applied" = "0" ]; then
-                    gauge_msg 74 "[13/17] Run Migrations" "Applying ${mig_name}..."
-                    cat "$mig" | $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
-                        psql -U itementry -d itementry >> "$LOG" 2>&1
+                gauge_msg 74 "[13/17] Run Migrations" "Applying ${mig_name}..."
+                if $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
+                    psql -U itementry -d itementry -v ON_ERROR_STOP=1 < "$mig" >> "$LOG" 2>&1; then
                     $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
-                        psql -U itementry -d itementry -c "INSERT INTO schema_migrations (filename) VALUES ('${mig_name}');" >> "$LOG" 2>&1
+                        psql -U itementry -d itementry -c \
+                        "INSERT INTO schema_migrations (filename) VALUES ('${mig_name}') ON CONFLICT (filename) DO NOTHING;" >> "$LOG" 2>&1
+                else
+                    log "ERROR: migration ${mig_name} failed to apply"
                 fi
             done
         fi
