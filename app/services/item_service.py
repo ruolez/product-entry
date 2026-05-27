@@ -93,6 +93,29 @@ def _apply_defaults(merged_fields, field_configs):
     return merged_fields
 
 
+def _duplicate_store_reasons(upc, sku, store_ids):
+    """Return {store_id: reason} for stores where the UPC or SKU already exists.
+
+    Stores absent from the map are safe to insert into. Reuses validate_upc /
+    validate_sku, which check each store independently.
+    """
+    reasons = {}
+
+    def _add(store_id, message):
+        reasons[store_id] = f"{reasons[store_id]}; {message}" if store_id in reasons else message
+
+    if upc:
+        for found in validate_upc(upc, store_ids)["found_in"]:
+            _add(found["store_id"], "UPC already exists in this store")
+    if sku:
+        sku_result = validate_sku(sku, store_ids)
+        for found in sku_result["found_in"]:
+            _add(found["store_id"], "SKU already exists in this store")
+        for found in sku_result["prefix_conflicts"]:
+            _add(found["store_id"], "SKU prefix (first 14 chars) conflicts in this store")
+    return reasons
+
+
 def insert_item(data):
     store_ids = data["store_ids"]
     common_fields = data["common_fields"]
@@ -104,26 +127,13 @@ def insert_item(data):
     errors.extend(validate_fields(common_fields, field_configs))
     errors.extend(validate_per_store_fields(per_store_fields, store_ids, field_configs))
 
-    upc = common_fields.get("ProductUPC", "").strip()
-    if upc:
-        upc_result = validate_upc(upc, store_ids)
-        if not upc_result["is_unique"]:
-            stores_with_upc = ", ".join(f["store_name"] for f in upc_result["found_in"])
-            errors.append({"field": "ProductUPC", "error": f"UPC already exists in: {stores_with_upc}"})
-
-    sku = common_fields.get("ProductSKU", "").strip()
-    if sku:
-        sku_result = validate_sku(sku, store_ids)
-        if not sku_result["is_unique"]:
-            if sku_result["found_in"]:
-                stores_list = ", ".join(f["store_name"] for f in sku_result["found_in"])
-                errors.append({"field": "ProductSKU", "error": f"SKU already exists in: {stores_list}"})
-            if sku_result["prefix_conflicts"]:
-                stores_list = ", ".join(f["store_name"] for f in sku_result["prefix_conflicts"])
-                errors.append({"field": "ProductSKU", "error": f"SKU prefix (first 14 chars) conflicts in: {stores_list}"})
-
     if errors:
         return {"success": False, "errors": errors, "results": []}
+
+    upc = common_fields.get("ProductUPC", "").strip()
+    sku = common_fields.get("ProductSKU", "").strip()
+    # Duplicate UPC/SKU blocks only the store(s) that have it; other stores proceed.
+    blocked_stores = _duplicate_store_reasons(upc, sku, store_ids)
 
     results = []
     stores_succeeded = []
@@ -134,6 +144,18 @@ def insert_item(data):
         store = get_store(store_id)
         store_name = store["name"] if store else f"Store {store_id}"
         sid = str(store_id)
+
+        if store_id in blocked_stores:
+            reason = blocked_stores[store_id]
+            results.append({
+                "store_id": store_id,
+                "store_name": store_name,
+                "success": False,
+                "error": reason,
+            })
+            stores_failed.append(store_name)
+            error_details[store_name] = reason
+            continue
 
         merged = {**common_fields}
         if sid in per_store_fields:
@@ -231,24 +253,11 @@ def insert_sibling_item(data):
     if not source_upc:
         errors.append({"field": "product-search", "error": "Source product is required"})
 
-    if not errors and new_upc:
-        upc_result = validate_upc(new_upc, store_ids)
-        if not upc_result["is_unique"]:
-            stores_with_upc = ", ".join(f["store_name"] for f in upc_result["found_in"])
-            errors.append({"field": "ProductUPC", "error": f"UPC already exists in: {stores_with_upc}"})
-
-    if not errors and new_sku:
-        sku_result = validate_sku(new_sku, store_ids)
-        if not sku_result["is_unique"]:
-            if sku_result["found_in"]:
-                stores_list = ", ".join(f["store_name"] for f in sku_result["found_in"])
-                errors.append({"field": "ProductSKU", "error": f"SKU already exists in: {stores_list}"})
-            if sku_result["prefix_conflicts"]:
-                stores_list = ", ".join(f["store_name"] for f in sku_result["prefix_conflicts"])
-                errors.append({"field": "ProductSKU", "error": f"SKU prefix conflicts in: {stores_list}"})
-
     if errors:
         return {"success": False, "errors": errors, "results": []}
+
+    # Duplicate UPC/SKU blocks only the store(s) that have it; other stores proceed.
+    blocked_stores = _duplicate_store_reasons(new_upc, new_sku, store_ids)
 
     results = []
     stores_succeeded = []
@@ -259,6 +268,18 @@ def insert_sibling_item(data):
     for store_id in store_ids:
         store = get_store(store_id)
         store_name = store["name"] if store else f"Store {store_id}"
+
+        if store_id in blocked_stores:
+            reason = blocked_stores[store_id]
+            results.append({
+                "store_id": store_id,
+                "store_name": store_name,
+                "success": False,
+                "error": reason,
+            })
+            stores_failed.append(store_name)
+            error_details[store_name] = reason
+            continue
 
         source = get_product_by_upc(store_id, source_upc)
         if not source:
