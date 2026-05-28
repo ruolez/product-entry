@@ -347,8 +347,9 @@ function captureFormState() {
 function restoreFormState(snap) {
     document.getElementById("sp-title").value = snap.title || "";
     if (state.quill) {
-        state.quill.root.innerHTML = snap.descriptionHtml || "";
-        state.descriptionHtml = snap.descriptionHtml || "";
+        const html = snap.descriptionHtml || "";
+        state.quill.setContents(state.quill.clipboard.convert({ html }), "silent");
+        state.descriptionHtml = html;
     }
     document.getElementById("sp-vendor").value = snap.vendor || "";
     document.getElementById("sp-product-type").value = snap.productType || "";
@@ -2221,7 +2222,7 @@ function fillTestData() {
     // Description (Quill)
     const descHtml = `<h2>Test Product #${id}</h2><p>This is an <strong>automatically generated</strong> test product for system testing.</p><ul><li>Feature one: Premium quality</li><li>Feature two: Fast shipping</li><li>Feature three: 30-day returns</li></ul><p>Available in multiple sizes and colors.</p>`;
     if (state.quill) {
-        state.quill.root.innerHTML = descHtml;
+        state.quill.setContents(state.quill.clipboard.convert({ html: descHtml }), "silent");
         state.descriptionHtml = descHtml;
     }
 
