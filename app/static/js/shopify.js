@@ -95,33 +95,54 @@ async function runDuplicateCheck(skuId, barcodeId) {
     const barcodeEl = document.getElementById(barcodeId);
     const sku = skuEl?.value?.trim() || "";
     const barcode = barcodeEl?.value?.trim() || "";
+    const skuErrId = skuId.replace("sp-", "sp-error-");
+    const barcodeErrId = barcodeId.replace("sp-", "sp-error-");
+    const skuErr = document.getElementById(skuErrId);
+    const barcodeErr = document.getElementById(barcodeErrId);
+    if (skuErr) skuErr.textContent = "";
+    if (barcodeErr) barcodeErr.textContent = "";
     if (!sku && !barcode) return;
-    if (!state.activeStoreId) return;
+
+    // For the global SKU/Barcode pair, check every selected store. Variant
+    // duplicate checks (sp-new-variant-*) still target only the active store
+    // since each store's variant is created independently on its product.
+    const isGlobalPair = skuId === "sp-sku" && barcodeId === "sp-barcode";
+    const storeIds = isGlobalPair
+        ? state.selectedStoreIds
+        : (state.activeStoreId ? [state.activeStoreId] : []);
+    if (!storeIds.length) return;
 
     try {
-        const result = await api.post("/api/shopify/products/check-duplicates", {
-            store_id: state.activeStoreId,
-            sku: sku || undefined,
-            barcode: barcode || undefined,
-        });
-        const skuErrId = skuId.replace("sp-", "sp-error-");
-        const barcodeErrId = barcodeId.replace("sp-", "sp-error-");
-        const skuErr = document.getElementById(skuErrId);
-        const barcodeErr = document.getElementById(barcodeErrId);
+        const results = await Promise.all(storeIds.map(sid =>
+            api.post("/api/shopify/products/check-duplicates", {
+                store_id: sid,
+                sku: sku || undefined,
+                barcode: barcode || undefined,
+            }).then(r => ({ sid, r })).catch(() => null)
+        ));
+        const storeName = (sid) => state.stores.find(s => s.id === sid)?.name || `Store ${sid}`;
+
+        const skuHits = results.filter(x => x?.r?.sku);
+        const barcodeHits = results.filter(x => x?.r?.barcode);
+
         if (skuErr) {
-            if (result.sku) {
-                skuErr.textContent = `SKU already exists on "${result.sku.product_title}"`;
+            if (skuHits.length) {
+                const title = skuHits[0].r.sku.product_title;
+                const names = skuHits.map(x => storeName(x.sid)).join(", ");
+                skuErr.textContent = isGlobalPair
+                    ? `SKU already exists on "${title}" in: ${names}`
+                    : `SKU already exists on "${title}"`;
                 skuErr.style.color = "var(--md-error, #d93025)";
-            } else {
-                skuErr.textContent = "";
             }
         }
         if (barcodeErr) {
-            if (result.barcode) {
-                barcodeErr.textContent = `Barcode already exists on "${result.barcode.product_title}"`;
+            if (barcodeHits.length) {
+                const title = barcodeHits[0].r.barcode.product_title;
+                const names = barcodeHits.map(x => storeName(x.sid)).join(", ");
+                barcodeErr.textContent = isGlobalPair
+                    ? `Barcode already exists on "${title}" in: ${names}`
+                    : `Barcode already exists on "${title}"`;
                 barcodeErr.style.color = "var(--md-error, #d93025)";
-            } else {
-                barcodeErr.textContent = "";
             }
         }
     } catch (_) {}
@@ -357,8 +378,9 @@ function restoreFormState(snap) {
     document.getElementById("sp-price").value = snap.price || "";
     document.getElementById("sp-compare-at-price").value = snap.compareAtPrice || "";
     document.getElementById("sp-cost").value = snap.cost || "";
-    document.getElementById("sp-sku").value = snap.sku || "";
-    document.getElementById("sp-barcode").value = snap.barcode || "";
+    // SKU and barcode (UPC) are global product identifiers shared across stores —
+    // do not overwrite them on store switch. captureFormState still records the
+    // live values into each per-store snapshot so the save path stays uniform.
     document.getElementById("sp-charge-tax").checked = snap.chargeTax !== false;
     document.getElementById("sp-track-inventory").checked = snap.trackInventory !== false;
     document.getElementById("sp-continue-selling").checked = !!snap.continueSelling;
@@ -2544,6 +2566,12 @@ function applyLookupData(p, extraInfo, perStoreProducts) {
     if (activeSnap) {
         restoreFormState(activeSnap);
     }
+
+    // SKU/Barcode are global and not restored by restoreFormState — seed them
+    // once from the active store's snapshot (preferred) or the base product.
+    const seed = activeSnap || p;
+    document.getElementById("sp-sku").value = seed?.sku || "";
+    document.getElementById("sp-barcode").value = seed?.barcode || "";
 
     document.getElementById("sp-error-title").textContent = "";
     const activeStoreIsVariant = activeSnap?.isVariantProduct;
