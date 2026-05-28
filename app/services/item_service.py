@@ -124,7 +124,7 @@ def insert_item(data):
     field_configs = get_field_configs()
     errors = []
 
-    errors.extend(validate_fields(common_fields, field_configs))
+    errors.extend(validate_fields(common_fields, field_configs, per_store_fields, store_ids))
     errors.extend(validate_per_store_fields(per_store_fields, store_ids, field_configs))
 
     if errors:

@@ -780,6 +780,23 @@ function updateAllMargins() {
 }
 
 // ── Per-Store Prices ───────────────────────────────────
+function perStorePricesComplete() {
+    const ids = state.selectedStoreIds;
+    if (ids.length === 0) return false;
+    const filled = (v) => v !== undefined && v !== null && String(v).trim() !== "";
+    return ids.every(sid => {
+        const sp = state.perStorePrices[sid];
+        return sp && filled(sp.UnitCost) && filled(sp.UnitPrice);
+    });
+}
+
+function updatePriceRequiredMarks() {
+    const optional = perStorePricesComplete();
+    document
+        .querySelectorAll("#cell-UnitCost .required-mark, #cell-UnitPrice .required-mark")
+        .forEach(m => m.classList.toggle("hidden", optional));
+}
+
 function renderStorePriceRows() {
     const container = document.getElementById("store-price-rows");
     const section = document.getElementById("store-prices-section");
@@ -787,6 +804,7 @@ function renderStorePriceRows() {
 
     if (state.selectedStoreIds.length === 0) {
         section.classList.add("hidden");
+        updatePriceRequiredMarks();
         return;
     }
 
@@ -835,9 +853,12 @@ function renderStorePriceRows() {
             input.addEventListener("change", () => {
                 if (!state.perStorePrices[sid]) state.perStorePrices[sid] = {};
                 state.perStorePrices[sid][input.dataset.spr] = input.value;
+                updatePriceRequiredMarks();
             });
         });
     });
+
+    updatePriceRequiredMarks();
 }
 
 function copyPricesToStores() {
@@ -974,7 +995,13 @@ function setFieldError(fieldName, message) {
 
 function validateRequired() {
     let firstError = null;
-    const requiredCommon = ["ProductUPC", "ProductSKU", "ProductDescription", "UnitCost", "UnitPrice"];
+    const requiredCommon = ["ProductUPC", "ProductSKU", "ProductDescription"];
+    if (perStorePricesComplete()) {
+        setFieldError("UnitCost", "");
+        setFieldError("UnitPrice", "");
+    } else {
+        requiredCommon.push("UnitCost", "UnitPrice");
+    }
 
     for (const name of requiredCommon) {
         const el = document.getElementById(`field-${name}`);

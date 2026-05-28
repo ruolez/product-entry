@@ -86,8 +86,26 @@ FIELD_MAX_LENGTHS = {
 }
 
 
-def validate_fields(common_fields, field_configs):
+PER_STORE_GATED_FIELDS = ("UnitCost", "UnitPrice")
+
+
+def _per_store_prices_complete(per_store_fields, store_ids):
+    if not store_ids:
+        return False
+    for store_id in store_ids:
+        sf = per_store_fields.get(str(store_id), {})
+        for field_name in PER_STORE_GATED_FIELDS:
+            val = sf.get(field_name)
+            if val is None or (isinstance(val, str) and not val.strip()):
+                return False
+    return True
+
+
+def validate_fields(common_fields, field_configs, per_store_fields=None, store_ids=None):
     errors = []
+    per_store_fields = per_store_fields or {}
+    store_ids = store_ids or []
+    prices_complete = _per_store_prices_complete(per_store_fields, store_ids)
 
     required_common = [
         fc["field_name"]
@@ -95,6 +113,8 @@ def validate_fields(common_fields, field_configs):
         if fc["is_required"] and not fc["is_per_store"]
     ]
     for field_name in required_common:
+        if prices_complete and field_name in PER_STORE_GATED_FIELDS:
+            continue
         val = common_fields.get(field_name)
         if val is None or (isinstance(val, str) and not val.strip()):
             display = next(
