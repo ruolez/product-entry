@@ -1,13 +1,16 @@
 #!/bin/bash
 # ============================================================================
-#  Product Entry - Visual Interactive Installer
+#  Product Entry - Text Interactive Installer
 #  Designed for Ubuntu Server 24.04 LTS (Minimal Install)
+#
+#  All command output streams to the terminal (and is tee'd to the install
+#  log) so failures are visible as they happen.
 #
 #  Usage:  curl -fsSL <raw-url>/install.sh | sudo bash
 #     or:  sudo bash install.sh
 # ============================================================================
 
-set -e
+set -eo pipefail
 
 # ── Config ──────────────────────────────────────────────
 APP_NAME="product-entry"
@@ -19,29 +22,81 @@ DC="docker compose"
 PORT=80
 LOG="/tmp/${APP_NAME}-install.log"
 
-# ── Whiptail dimensions & colors ────────────────────────
-WT_HEIGHT=20
-WT_WIDTH=70
-WT_MENU_HEIGHT=10
-
-# Full color scheme: red title/border, white text, blue background
-export NEWT_COLORS='root=,blue;roottext=white,blue;window=white,red;border=white,red;title=white,red;textbox=black,white;actbutton=white,red;button=black,white;compactbutton=black,white;checkbox=black,white;actcheckbox=white,red;listbox=black,white;actlistbox=white,red;actsellistbox=white,red;entry=black,white;label=white,red'
-
 # ── Root check ──────────────────────────────────────────
 if [ "$EUID" -ne 0 ]; then
     echo "ERROR: This script must be run as root (sudo)."
     exit 1
 fi
 
-# ── Ensure whiptail is available ────────────────────────
-if ! command -v whiptail &>/dev/null; then
-    echo "Installing whiptail..."
-    apt-get update -qq && apt-get install -y -qq whiptail >/dev/null 2>&1
-fi
-
 # ── Log setup ───────────────────────────────────────────
 : > "$LOG"
 log() { echo "[$(date '+%H:%M:%S')] $*" >> "$LOG"; }
+
+# ── Text UI helpers ─────────────────────────────────────
+# Prompts read from /dev/tty so they still work under `curl ... | sudo bash`.
+C_BOLD=$'\033[1m'; C_RED=$'\033[31m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_DIM=$'\033[2m'; C_OFF=$'\033[0m'
+
+hr() { printf '%s\n' "────────────────────────────────────────────────────────────"; }
+
+# Boxed informational message (replaces whiptail --msgbox). Pauses if a tty exists.
+note() {
+    local title="$1" body="$2"
+    echo
+    hr
+    [ -n "$title" ] && printf '%s%s%s\n\n' "$C_BOLD" "$title" "$C_OFF"
+    printf '%b\n' "$body"
+    hr
+    [ -e /dev/tty ] && read -rp "Press Enter to continue..." _ </dev/tty || true
+}
+
+# Yes/No confirmation (replaces whiptail --yesno). $2 = default (y|n), defaults to n.
+confirm() {
+    local q="$1" def="${2:-n}" ans prompt
+    [ "$def" = "y" ] && prompt="[Y/n]" || prompt="[y/N]"
+    if [ -e /dev/tty ]; then
+        read -rp "$q $prompt: " ans </dev/tty
+    else
+        ans=""
+    fi
+    ans="${ans:-$def}"
+    [[ "$ans" =~ ^[Yy] ]]
+}
+
+# Numbered single-choice menu (replaces whiptail --menu).
+# Usage: choose "prompt" key1 "label1" key2 "label2" ... ; echoes the chosen key.
+# The menu renders on the terminal; only the selected key goes to stdout.
+choose() {
+    local prompt="$1"; shift
+    local keys=() labels=()
+    while [ $# -gt 0 ]; do keys+=("$1"); labels+=("$2"); shift 2; done
+    {
+        echo
+        printf '%s%s%s\n' "$C_BOLD" "$prompt" "$C_OFF"
+        local idx
+        for idx in "${!keys[@]}"; do
+            printf '  %2d) %s\n' "$((idx + 1))" "${labels[$idx]}"
+        done
+    } >/dev/tty
+    local sel
+    read -rp "Select [1-${#keys[@]}]: " sel </dev/tty
+    if [[ "$sel" =~ ^[0-9]+$ ]] && [ "$sel" -ge 1 ] && [ "$sel" -le "${#keys[@]}" ]; then
+        echo "${keys[$((sel - 1))]}"
+    else
+        echo ""
+    fi
+}
+
+# Print a block of text (replaces whiptail --textbox), then wait for Enter.
+show_text() {
+    local title="$1" content="$2"
+    echo
+    hr
+    printf '%s%s%s\n' "$C_BOLD" "$title" "$C_OFF"
+    hr
+    printf '%s\n' "$content"
+    hr
+    [ -e /dev/tty ] && read -rp "Press Enter to continue..." _ </dev/tty || true
+}
 
 # ════════════════════════════════════════════════════════
 #  UTILITY FUNCTIONS
@@ -85,55 +140,18 @@ get_status_info() {
     echo "${status}|${ip}|${stores}|${formulas}"
 }
 
-# ── Gauge-based progress runner ─────────────────────────
-# Usage: run_with_progress "Title" step1_func step2_func ...
-# Each step function should: echo "description" first, then do work
-run_with_progress() {
-    local title="$1"
-    shift
-    local steps=("$@")
-    local total=${#steps[@]}
-    local i=0
-
-    for step_func in "${steps[@]}"; do
-        i=$((i + 1))
-        local pct=$(( (i - 1) * 100 / total ))
-        local desc
-        desc=$($step_func description 2>/dev/null)
-        echo "$pct"
-        echo "XXX"
-        echo "Step ${i}/${total}: ${desc}"
-        echo "XXX"
-        log "Step ${i}/${total}: ${desc}"
-        $step_func execute >> "$LOG" 2>&1
-        if [ $? -ne 0 ]; then
-            log "FAILED: ${desc}"
-            echo "100"
-            return 1
-        fi
-        log "OK: ${desc}"
-    done
-    echo "100"
-    echo "XXX"
-    echo "Complete!"
-    echo "XXX"
-    return 0
-}
-
-# ── Gauge helper ────────────────────────────────────────
-# Whiptail gauge reads: percentage, then XXX, then text lines, then XXX
+# ── Progress step printer ───────────────────────────────
+# Prints a step banner to the terminal. The first arg (a legacy percentage) is
+# accepted and ignored so existing call sites need no changes.
 gauge_msg() {
-    local pct="$1"
     local phase="$2"
     local detail="$3"
-    echo "$pct"
-    echo "XXX"
     if [ -n "$detail" ]; then
-        printf '%s\n\n%s\n' "$phase" "$detail"
+        printf '\n%s==> %s%s\n    %s\n' "$C_BOLD" "$phase" "$C_OFF" "$detail"
     else
-        echo "$phase"
+        printf '\n%s==> %s%s\n' "$C_BOLD" "$phase" "$C_OFF"
     fi
-    echo "XXX"
+    log "${phase} ${detail}"
 }
 
 # ════════════════════════════════════════════════════════
@@ -292,30 +310,33 @@ NGEOF
 #  ASK FOR SERVER IP
 # ════════════════════════════════════════════════════════
 
+# Echoes the chosen IP to stdout; all prompts/errors go to stderr so callers can
+# capture the value with $(ask_server_ip).
 ask_server_ip() {
-    local detected_ip
+    local detected_ip default_ip server_ip
     detected_ip=$(detect_ip)
-    local default_ip="${1:-$detected_ip}"
+    default_ip="${1:-$detected_ip}"
 
-    local server_ip
-    server_ip=$(whiptail --inputbox \
-        "Enter the server IP address for this installation.\n\nThis IP will be used for:\n  - Nginx server_name\n  - CORS allowed origins\n  - Access URL\n\nDetected IP: ${detected_ip:-none}" \
-        $WT_HEIGHT $WT_WIDTH "$default_ip" \
-        --title "Network Configuration" \
-        3>&1 1>&2 2>&3) || return 1
+    printf '\n%sNetwork configuration%s — used for nginx server_name, CORS origin, access URL.\n' \
+        "$C_BOLD" "$C_OFF" >&2
+    [ -n "$detected_ip" ] && printf '  Detected IP: %s\n' "$detected_ip" >&2
 
-    if [ -z "$server_ip" ]; then
-        whiptail --msgbox "IP address is required. Installation cancelled." 8 $WT_WIDTH --title "Error"
-        return 1
-    fi
+    while true; do
+        if [ -e /dev/tty ]; then
+            read -rp "Server IP address [$default_ip]: " server_ip </dev/tty
+        else
+            server_ip=""
+        fi
+        server_ip="${server_ip:-$default_ip}"
 
-    # Validate IP format
-    if ! echo "$server_ip" | grep -qP '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$'; then
-        whiptail --msgbox "Invalid IP address format: ${server_ip}" 8 $WT_WIDTH --title "Error"
-        return 1
-    fi
+        if echo "$server_ip" | grep -qP '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$'; then
+            echo "$server_ip"
+            return 0
+        fi
 
-    echo "$server_ip"
+        printf '%s  Invalid or empty IP: "%s"%s\n' "$C_RED" "$server_ip" "$C_OFF" >&2
+        [ -e /dev/tty ] || return 1   # cannot prompt non-interactively; give up
+    done
 }
 
 # ════════════════════════════════════════════════════════
@@ -325,17 +346,15 @@ ask_server_ip() {
 do_install() {
     # Check existing installation
     if [ -d "$INSTALL_DIR" ]; then
-        if ! whiptail --yesno \
-            "An existing installation was found at:\n\n  ${INSTALL_DIR}\n\nThis will REMOVE the existing installation and start fresh.\nDatabase data will be DELETED.\n\nContinue with fresh install?" \
-            $WT_HEIGHT $WT_WIDTH --title "Existing Installation Found" --defaultno; then
+        note "Existing Installation Found" \
+"An existing installation was found at:\n\n  ${INSTALL_DIR}\n\nContinuing will REMOVE it and start fresh. Database data will be DELETED."
+        if ! confirm "Continue with fresh install?" n; then
             return
         fi
-        # Remove silently
-        whiptail --infobox "Removing existing installation..." 5 $WT_WIDTH
+        echo "  Removing existing installation..."
         cd /tmp
         (cd "$INSTALL_DIR" 2>/dev/null && $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" down -v 2>/dev/null) || true
         rm -rf "$INSTALL_DIR"
-        sleep 1
     fi
 
     # Get server IP
@@ -343,39 +362,32 @@ do_install() {
     server_ip=$(ask_server_ip) || return
 
     # Confirm
-    if ! whiptail --yesno \
-        "Ready to install ${APP_TITLE}.\n\n\
-  Server IP:       ${server_ip}\n\
-  Install path:    ${INSTALL_DIR}\n\
-  Web access:      http://${server_ip}\n\
-  Docker port:     ${PORT}\n\n\
-This will install Docker (if needed), clone the repository,\n\
-generate secure credentials, and build production containers.\n\n\
-Proceed with installation?" \
-        $WT_HEIGHT $WT_WIDTH --title "Confirm Installation"; then
+    note "Confirm Installation" \
+"Ready to install ${APP_TITLE}.\n\n  Server IP:     ${server_ip}\n  Install path:  ${INSTALL_DIR}\n  Web access:    http://${server_ip}\n  Docker port:   ${PORT}\n\nThis will install Docker (if needed), clone the repository,\ngenerate secure credentials, and build production containers."
+    if ! confirm "Proceed with installation?" y; then
         return
     fi
 
-    # ── Run install steps with progress gauge ───────
+    # ── Run install steps (output streams to terminal + ${LOG}) ───────
     local pg_pass fernet_key
     pg_pass=$(generate_password)
     fernet_key=$(generate_fernet_key)
 
-    {
+    (
         gauge_msg 0  "[ 1/20] System Dependencies" "Running apt-get update..."
-        apt-get update -qq >> "$LOG" 2>&1
+        apt-get update -qq 2>&1 | tee -a "$LOG"
 
         gauge_msg 3  "[ 2/20] System Dependencies" "Installing git, curl, openssl, python3..."
-        apt-get install -y -qq git curl openssl python3 >> "$LOG" 2>&1
+        apt-get install -y -qq git curl openssl python3 2>&1 | tee -a "$LOG"
 
         gauge_msg 5  "[ 3/20] System Dependencies" "Installing ca-certificates, gnupg, lsb-release..."
-        apt-get install -y -qq ca-certificates gnupg lsb-release >> "$LOG" 2>&1
+        apt-get install -y -qq ca-certificates gnupg lsb-release 2>&1 | tee -a "$LOG"
 
         gauge_msg 7  "[ 4/20] Docker Engine" "Checking if Docker is installed..."
         if ! command -v docker &>/dev/null; then
             gauge_msg 8  "[ 5/20] Docker Engine" "Adding Docker GPG key..."
-            install -m 0755 -d /etc/apt/keyrings >> "$LOG" 2>&1
-            curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc 2>> "$LOG"
+            install -m 0755 -d /etc/apt/keyrings 2>&1 | tee -a "$LOG"
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc 2>&1 | tee -a "$LOG"
             chmod a+r /etc/apt/keyrings/docker.asc
 
             gauge_msg 10 "[ 6/20] Docker Engine" "Adding Docker APT repository..."
@@ -386,16 +398,16 @@ Proceed with installation?" \
                 tee /etc/apt/sources.list.d/docker.list >/dev/null
 
             gauge_msg 12 "[ 7/20] Docker Engine" "Updating package lists with Docker repo..."
-            apt-get update -qq >> "$LOG" 2>&1
+            apt-get update -qq 2>&1 | tee -a "$LOG"
 
             gauge_msg 14 "[ 8/20] Docker Engine" "Installing docker-ce, docker-ce-cli (~400MB download)..."
-            apt-get install -y -qq docker-ce docker-ce-cli >> "$LOG" 2>&1
+            apt-get install -y -qq docker-ce docker-ce-cli 2>&1 | tee -a "$LOG"
 
             gauge_msg 18 "[ 9/20] Docker Engine" "Installing containerd, buildx, compose plugin..."
-            apt-get install -y -qq containerd.io docker-buildx-plugin docker-compose-plugin >> "$LOG" 2>&1
+            apt-get install -y -qq containerd.io docker-buildx-plugin docker-compose-plugin 2>&1 | tee -a "$LOG"
 
             gauge_msg 22 "[10/20] Docker Engine" "Enabling Docker service (auto-start on boot)..."
-            systemctl enable docker --now >> "$LOG" 2>&1
+            systemctl enable docker --now 2>&1 | tee -a "$LOG"
             sleep 2
 
             gauge_msg 25 "[10/20] Docker Engine" "Done: $(docker --version 2>/dev/null | head -c 40)"
@@ -406,7 +418,7 @@ Proceed with installation?" \
         fi
 
         gauge_msg 27 "[11/20] Clone Repository" "Cloning ${REPO_URL}..."
-        git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" >> "$LOG" 2>&1
+        git clone --depth 1 "$REPO_URL" "$INSTALL_DIR" 2>&1 | tee -a "$LOG"
         gauge_msg 32 "[11/20] Clone Repository" "Cloned to ${INSTALL_DIR}"
         sleep 1
 
@@ -430,32 +442,20 @@ Proceed with installation?" \
         cd "$INSTALL_DIR"
 
         gauge_msg 41 "[16/20] Pull Base Images" "Pulling postgres:16-alpine..."
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" pull postgres >> "$LOG" 2>&1 || true
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" pull postgres 2>&1 | tee -a "$LOG" || true
 
         gauge_msg 45 "[17/20] Build App Container" "Installing FreeTDS, GCC, Flask, pymssql (2-5 min)..."
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --progress=plain app >> "$LOG" 2>&1 &
-        local build_pid=$!
-        local build_pct=45
-        while kill -0 $build_pid 2>/dev/null; do
-            build_pct=$((build_pct + 1))
-            [ $build_pct -gt 66 ] && build_pct=66
-            local last_line
-            last_line=$(tail -1 "$LOG" 2>/dev/null | sed 's/^[#0-9 ]*//' | head -c 50)
-            gauge_msg "$build_pct" "[17/20] Build App Container" "> ${last_line:-working...}"
-            sleep 3
-        done
-        wait $build_pid || true
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --progress=plain app 2>&1 | tee -a "$LOG"
 
         gauge_msg 68 "[18/20] Build Nginx Container" "Building nginx:alpine with custom config..."
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --progress=plain nginx >> "$LOG" 2>&1
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --progress=plain nginx 2>&1 | tee -a "$LOG"
         gauge_msg 72 "[18/20] Build Containers" "All container images built successfully."
-        sleep 1
 
         gauge_msg 73 "[19/20] Start PostgreSQL" "Creating network, starting postgres:16..."
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d postgres >> "$LOG" 2>&1
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d postgres 2>&1 | tee -a "$LOG"
         local pg_retries=0
         while [ $pg_retries -lt 15 ]; do
-            if $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres pg_isready -U itementry >> "$LOG" 2>&1; then
+            if $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres pg_isready -U itementry 2>&1 | tee -a "$LOG"; then
                 break
             fi
             pg_retries=$((pg_retries + 1))
@@ -464,11 +464,11 @@ Proceed with installation?" \
         done
 
         gauge_msg 79 "[19/20] Start Application" "Starting Flask/Gunicorn (4 workers)..."
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d app >> "$LOG" 2>&1
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d app 2>&1 | tee -a "$LOG"
         sleep 2
 
         gauge_msg 81 "[19/20] Start Nginx" "Starting reverse proxy on port ${PORT}..."
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d nginx >> "$LOG" 2>&1
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d nginx 2>&1 | tee -a "$LOG"
         sleep 1
         gauge_msg 83 "[19/20] Start Services" "All 3 containers are running."
         sleep 1
@@ -495,42 +495,16 @@ Proceed with installation?" \
         sleep 1
 
         gauge_msg 100 "Installation complete!" "All services running at http://${server_ip}"
-        sleep 1
 
-    } | whiptail --gauge "Preparing..." 14 $WT_WIDTH 0 --title "Installing ${APP_TITLE}"
+    ) || true
 
     # ── Result ────────────────────────────────────────
     if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
-        whiptail --msgbox \
-"$( cat <<MSGEOF
-    Installation Successful!
-
-    ${APP_TITLE} is now running.
-
-    ┌─────────────────────────────────────────────┐
-    │  Web Interface:  http://${server_ip}        │
-    │  Settings:       http://${server_ip}/settings│
-    │  Install Path:   ${INSTALL_DIR}              │
-    └─────────────────────────────────────────────┘
-
-    Quick Start:
-    1. Open http://${server_ip}/settings
-    2. Add your MS SQL store connections
-    3. Configure price formulas
-    4. Start entering products!
-
-    Useful commands:
-    View logs:   cd ${INSTALL_DIR} && docker compose \\
-                 -f docker-compose.prod.yml logs -f
-    Restart:     cd ${INSTALL_DIR} && docker compose \\
-                 -f docker-compose.prod.yml restart
-    Update:      sudo bash ${INSTALL_DIR}/install.sh
-MSGEOF
-)" 26 60 --title "Installation Complete"
+        note "Installation Complete" \
+"${C_GREEN}Installation Successful!${C_OFF}  ${APP_TITLE} is now running.\n\n  Web Interface:  http://${server_ip}\n  Settings:       http://${server_ip}/settings\n  Install Path:   ${INSTALL_DIR}\n\nQuick Start:\n  1. Open http://${server_ip}/settings\n  2. Add your MS SQL store connections\n  3. Configure price formulas\n  4. Start entering products!\n\nUseful commands:\n  View logs:  cd ${INSTALL_DIR} && docker compose -f docker-compose.prod.yml logs -f\n  Restart:    cd ${INSTALL_DIR} && docker compose -f docker-compose.prod.yml restart\n  Update:     sudo bash ${INSTALL_DIR}/install.sh"
     else
-        whiptail --msgbox \
-            "Installation finished but health check failed.\n\nThe services may still be starting.\nCheck logs: cd ${INSTALL_DIR} && docker compose -f docker-compose.prod.yml logs\n\nFull install log: ${LOG}" \
-            12 $WT_WIDTH --title "Warning"
+        note "Warning" \
+"${C_YELLOW}Installation finished but the health check failed.${C_OFF}\n\nThe services may still be starting.\nCheck logs: cd ${INSTALL_DIR} && docker compose -f docker-compose.prod.yml logs\n\nFull install log: ${LOG}"
     fi
 }
 
@@ -540,7 +514,7 @@ MSGEOF
 
 do_update() {
     if [ ! -d "$INSTALL_DIR" ]; then
-        whiptail --msgbox "No installation found at ${INSTALL_DIR}.\n\nPlease run Install first." 10 $WT_WIDTH --title "Not Installed"
+        note "Not Installed" "No installation found at ${INSTALL_DIR}.\n\nPlease run Install first."
         return
     fi
 
@@ -566,44 +540,34 @@ do_update() {
     server_ip=$(ask_server_ip "$current_ip") || return
 
     # Confirm
-    if ! whiptail --yesno \
-        "Ready to update ${APP_TITLE}.\n\n\
-  Server IP:       ${server_ip}\n\
-  Install path:    ${INSTALL_DIR}\n\n\
-This will:\n\
-  - Preserve all database data (stores, formulas, history)\n\
-  - Preserve encryption keys and passwords\n\
-  - Pull latest code from GitHub\n\
-  - Rebuild Docker containers\n\
-  - Clean up old Docker images and logs\n\n\
-Services will be briefly offline during rebuild.\n\n\
-Proceed?" \
-        $WT_HEIGHT $WT_WIDTH --title "Confirm Update"; then
+    note "Confirm Update" \
+"Ready to update ${APP_TITLE}.\n\n  Server IP:     ${server_ip}\n  Install path:  ${INSTALL_DIR}\n\nThis will:\n  - Preserve all database data (stores, formulas, history)\n  - Preserve encryption keys and passwords\n  - Pull latest code from GitHub\n  - Rebuild Docker containers\n  - Clean up old Docker images and logs\n\nServices will be briefly offline during rebuild."
+    if ! confirm "Proceed with update?" y; then
         return
     fi
 
-    {
+    (
         gauge_msg 0  "[ 1/17] Backup Config" "Backing up .env to .env.backup..."
         cp .env .env.backup 2>/dev/null || true
 
         gauge_msg 5  "[ 2/17] Stop Nginx" "Stopping reverse proxy..."
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" stop nginx >> "$LOG" 2>&1 || true
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" stop nginx 2>&1 | tee -a "$LOG" || true
 
         gauge_msg 8  "[ 3/17] Stop App" "Stopping Flask application..."
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" stop app >> "$LOG" 2>&1 || true
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" stop app 2>&1 | tee -a "$LOG" || true
 
         gauge_msg 11 "[ 4/17] Stop Postgres" "Stopping database (data safe in volume)..."
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" down >> "$LOG" 2>&1 || \
-        $DC -p "$COMPOSE_PROJECT" down >> "$LOG" 2>&1 || true
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" down 2>&1 | tee -a "$LOG" || \
+        $DC -p "$COMPOSE_PROJECT" down 2>&1 | tee -a "$LOG" || true
 
         gauge_msg 15 "[ 4/17] Services Stopped" "All containers down. Data volume preserved."
         sleep 1
 
         gauge_msg 17 "[ 5/17] Fetch Code" "git fetch origin main..."
-        git fetch origin main >> "$LOG" 2>&1
+        git fetch origin main 2>&1 | tee -a "$LOG"
 
         gauge_msg 20 "[ 6/17] Apply Code" "git reset --hard origin/main..."
-        git reset --hard origin/main >> "$LOG" 2>&1
+        git reset --hard origin/main 2>&1 | tee -a "$LOG"
         local commit_msg
         commit_msg=$(git log --oneline -1 2>/dev/null | head -c 50)
 
@@ -626,30 +590,19 @@ Proceed?" \
         sleep 1
 
         gauge_msg 36 "[11/17] Rebuild App" "Building app container --no-cache (2-5 min)..."
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --no-cache --progress=plain app >> "$LOG" 2>&1 &
-        local build_pid=$!
-        local build_pct=36
-        while kill -0 $build_pid 2>/dev/null; do
-            build_pct=$((build_pct + 1))
-            [ $build_pct -gt 58 ] && build_pct=58
-            local last_line
-            last_line=$(tail -1 "$LOG" 2>/dev/null | sed 's/^[#0-9 ]*//' | head -c 50)
-            gauge_msg "$build_pct" "[11/17] Rebuild App" "> ${last_line:-working...}"
-            sleep 3
-        done
-        wait $build_pid || true
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --no-cache --progress=plain app 2>&1 | tee -a "$LOG"
 
         gauge_msg 60 "[12/17] Rebuild Nginx" "Building nginx container..."
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --no-cache --progress=plain nginx >> "$LOG" 2>&1
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" build --no-cache --progress=plain nginx 2>&1 | tee -a "$LOG"
 
         gauge_msg 63 "[12/17] Build Complete" "All container images rebuilt."
         sleep 1
 
         gauge_msg 65 "[13/17] Start Postgres" "Starting PostgreSQL 16..."
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d postgres >> "$LOG" 2>&1
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d postgres 2>&1 | tee -a "$LOG"
         local pg_retries=0
         while [ $pg_retries -lt 10 ]; do
-            if $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres pg_isready -U itementry >> "$LOG" 2>&1; then
+            if $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres pg_isready -U itementry 2>&1 | tee -a "$LOG"; then
                 break
             fi
             pg_retries=$((pg_retries + 1))
@@ -662,7 +615,7 @@ Proceed?" \
         $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
             psql -U itementry -d itementry -c \
             "CREATE TABLE IF NOT EXISTS schema_migrations (id SERIAL PRIMARY KEY, filename VARCHAR(255) NOT NULL UNIQUE, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW());" \
-            >> "$LOG" 2>&1 || true
+            2>&1 | tee -a "$LOG" || true
         # Apply every migration file (all are idempotent) with ON_ERROR_STOP so a
         # failed apply is visible, and record it as applied ONLY on success. This
         # prevents schema_migrations from claiming a migration ran when it did not.
@@ -672,10 +625,10 @@ Proceed?" \
                 mig_name=$(basename "$mig")
                 gauge_msg 74 "[13/17] Run Migrations" "Applying ${mig_name}..."
                 if $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
-                    psql -U itementry -d itementry -v ON_ERROR_STOP=1 < "$mig" >> "$LOG" 2>&1; then
+                    psql -U itementry -d itementry -v ON_ERROR_STOP=1 < "$mig" 2>&1 | tee -a "$LOG"; then
                     $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" exec -T postgres \
                         psql -U itementry -d itementry -c \
-                        "INSERT INTO schema_migrations (filename) VALUES ('${mig_name}') ON CONFLICT (filename) DO NOTHING;" >> "$LOG" 2>&1
+                        "INSERT INTO schema_migrations (filename) VALUES ('${mig_name}') ON CONFLICT (filename) DO NOTHING;" 2>&1 | tee -a "$LOG"
                 else
                     log "ERROR: migration ${mig_name} failed to apply"
                 fi
@@ -683,21 +636,21 @@ Proceed?" \
         fi
 
         gauge_msg 75 "[14/17] Start App" "Starting Flask/Gunicorn (4 workers)..."
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d app >> "$LOG" 2>&1
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d app 2>&1 | tee -a "$LOG"
         sleep 2
 
         gauge_msg 78 "[14/17] Start Nginx" "Starting reverse proxy on port ${PORT}..."
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d nginx >> "$LOG" 2>&1
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d nginx 2>&1 | tee -a "$LOG"
         sleep 1
 
         gauge_msg 80 "[14/17] Services Running" "All 3 containers started."
         sleep 1
 
         gauge_msg 82 "[15/17] Cleanup" "Pruning unused Docker images..."
-        docker image prune -f >> "$LOG" 2>&1
+        docker image prune -f 2>&1 | tee -a "$LOG"
 
         gauge_msg 85 "[15/17] Cleanup" "Pruning build cache..."
-        docker builder prune -f >> "$LOG" 2>&1
+        docker builder prune -f 2>&1 | tee -a "$LOG"
 
         gauge_msg 87 "[15/17] Cleanup" "Truncating large log files..."
         find /var/lib/docker/containers/ -name "*.log" -size +10M -exec truncate -s 0 {} \; 2>/dev/null || true
@@ -717,9 +670,8 @@ Proceed?" \
         sleep 1
 
         gauge_msg 100 "Update complete!" "All services running at http://${server_ip}"
-        sleep 1
 
-    } | whiptail --gauge "Preparing..." 14 $WT_WIDTH 0 --title "Updating ${APP_TITLE}"
+    ) || true
 
     # Verify data
     local store_count formula_count
@@ -729,27 +681,11 @@ Proceed?" \
         psql -U itementry -d itementry -t -c "SELECT count(*) FROM price_formulas;" 2>/dev/null | tr -d ' ' || echo "?")
 
     if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
-        whiptail --msgbox \
-"$( cat <<MSGEOF
-    Update Successful!
-
-    ${APP_TITLE} has been updated and is running.
-
-    ┌─────────────────────────────────────────────┐
-    │  Web Interface:  http://${server_ip}        │
-    │  Settings:       http://${server_ip}/settings│
-    └─────────────────────────────────────────────┘
-
-    Data preserved:
-      Stores configured:  ${store_count}
-      Price formulas:     ${formula_count}
-      Config backup:      ${INSTALL_DIR}/.env.backup
-MSGEOF
-)" 20 60 --title "Update Complete"
+        note "Update Complete" \
+"${C_GREEN}Update Successful!${C_OFF}  ${APP_TITLE} has been updated and is running.\n\n  Web Interface:  http://${server_ip}\n  Settings:       http://${server_ip}/settings\n\nData preserved:\n  Stores configured:  ${store_count}\n  Price formulas:     ${formula_count}\n  Config backup:      ${INSTALL_DIR}/.env.backup"
     else
-        whiptail --msgbox \
-            "Update finished but health check failed.\n\nCheck logs: cd ${INSTALL_DIR} && docker compose -f docker-compose.prod.yml logs\n\nFull log: ${LOG}" \
-            10 $WT_WIDTH --title "Warning"
+        note "Warning" \
+"${C_YELLOW}Update finished but the health check failed.${C_OFF}\n\nCheck logs: cd ${INSTALL_DIR} && docker compose -f docker-compose.prod.yml logs\n\nFull log: ${LOG}"
     fi
 }
 
@@ -759,82 +695,54 @@ MSGEOF
 
 do_remove() {
     if [ ! -d "$INSTALL_DIR" ]; then
-        whiptail --msgbox "No installation found at ${INSTALL_DIR}.\n\nNothing to remove." 10 $WT_WIDTH --title "Not Installed"
+        note "Not Installed" "No installation found at ${INSTALL_DIR}.\n\nNothing to remove."
         return
     fi
 
     # First confirmation
-    if ! whiptail --yesno \
-        "This will stop all ${APP_TITLE} services and remove the application files from:\n\n  ${INSTALL_DIR}\n\nAre you sure?" \
-        $WT_HEIGHT $WT_WIDTH --title "Confirm Removal" --defaultno; then
+    note "Confirm Removal" \
+"This will stop all ${APP_TITLE} services and remove the application files from:\n\n  ${INSTALL_DIR}"
+    if ! confirm "Are you sure you want to remove ${APP_TITLE}?" n; then
         return
     fi
 
     # Ask about data
     local remove_data=false
-    if whiptail --yesno \
-        "Do you also want to DELETE the database?\n\nThis includes:\n  - Store connections\n  - Price formulas\n  - Field configurations\n  - Insertion history\n\nChoose 'No' to keep your data for a future reinstall." \
-        $WT_HEIGHT $WT_WIDTH --title "Database Data" --defaultno; then
-        # Second confirmation for data removal
-        if whiptail --yesno \
-            "FINAL WARNING\n\nAll database data will be permanently deleted.\nThis cannot be undone.\n\nDelete everything?" \
-            12 $WT_WIDTH --title "Confirm Data Deletion" --defaultno; then
+    if confirm "Also DELETE the database (stores, formulas, field configs, history)?" n; then
+        if confirm "${C_RED}FINAL WARNING:${C_OFF} permanently delete all database data?" n; then
             remove_data=true
         fi
     fi
 
-    {
-        echo "10"
-        echo "XXX"
-        echo "Stopping containers..."
-        echo "XXX"
+    (
+        gauge_msg "" "Stopping containers..."
         cd "$INSTALL_DIR" 2>/dev/null || true
-        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" down >> "$LOG" 2>&1 || \
-        $DC -p "$COMPOSE_PROJECT" down >> "$LOG" 2>&1 || true
-        log "Containers stopped"
+        $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" down 2>&1 | tee -a "$LOG" || \
+        $DC -p "$COMPOSE_PROJECT" down 2>&1 | tee -a "$LOG" || true
 
         if [ "$remove_data" = true ]; then
-            echo "30"
-            echo "XXX"
-            echo "Removing database volume..."
-            echo "XXX"
-            docker volume rm "${COMPOSE_PROJECT}_pgdata" >> "$LOG" 2>&1 || \
-            docker volume rm "product-entry_pgdata" >> "$LOG" 2>&1 || true
-            log "Database volume removed"
+            gauge_msg "" "Removing database volume..."
+            docker volume rm "${COMPOSE_PROJECT}_pgdata" 2>&1 | tee -a "$LOG" || \
+            docker volume rm "product-entry_pgdata" 2>&1 | tee -a "$LOG" || true
         fi
 
-        echo "50"
-        echo "XXX"
-        echo "Removing application files..."
-        echo "XXX"
+        gauge_msg "" "Removing application files..."
         cd /tmp
         rm -rf "$INSTALL_DIR"
-        log "App files removed"
 
-        echo "70"
-        echo "XXX"
-        echo "Cleaning up Docker resources..."
-        echo "XXX"
-        docker image prune -f >> "$LOG" 2>&1
-        docker builder prune -f >> "$LOG" 2>&1
-        log "Docker cleanup done"
+        gauge_msg "" "Cleaning up Docker resources..."
+        docker image prune -f 2>&1 | tee -a "$LOG"
+        docker builder prune -f 2>&1 | tee -a "$LOG"
 
-        echo "100"
-        echo "XXX"
-        echo "Removal complete!"
-        echo "XXX"
-        sleep 1
+        gauge_msg "" "Removal complete!"
+    ) || true
 
-    } | whiptail --gauge "Removing ${APP_TITLE}..." 14 $WT_WIDTH 0 --title "Removing"
-
-    local data_msg="Database data has been PRESERVED in Docker volume.\nReinstall to reconnect to your existing data."
+    local data_msg="Database data has been PRESERVED in the Docker volume.\nReinstall to reconnect to your existing data."
     if [ "$remove_data" = true ]; then
         data_msg="All data has been permanently removed."
     fi
 
-    whiptail --msgbox \
-        "${APP_TITLE} has been removed.\n\n${data_msg}" \
-        12 $WT_WIDTH --title "Removal Complete"
+    note "Removal Complete" "${APP_TITLE} has been removed.\n\n${data_msg}"
 }
 
 # ════════════════════════════════════════════════════════
@@ -843,18 +751,18 @@ do_remove() {
 
 do_view_logs() {
     if [ ! -d "$INSTALL_DIR" ]; then
-        whiptail --msgbox "No installation found." 8 $WT_WIDTH --title "Not Installed"
+        note "Not Installed" "No installation found."
         return
     fi
 
     local log_choice
-    log_choice=$(whiptail --menu "Select container logs to view:" $WT_HEIGHT $WT_WIDTH 5 \
+    log_choice=$(choose "Select logs to view:" \
         "all"      "All containers (combined)" \
         "app"      "Application (Flask/Gunicorn)" \
         "nginx"    "Nginx (reverse proxy)" \
         "postgres" "PostgreSQL (database)" \
-        "install"  "Installation log (${LOG})" \
-        3>&1 1>&2 2>&3) || return
+        "install"  "Installation log (${LOG})")
+    [ -z "$log_choice" ] && return
 
     local logs=""
     if [ "$log_choice" = "install" ]; then
@@ -865,10 +773,7 @@ do_view_logs() {
         logs=$(cd "$INSTALL_DIR" && $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" logs --tail 100 $svc 2>&1)
     fi
 
-    # Show in scrollable textbox
-    echo "$logs" > /tmp/pe-log-view.txt
-    whiptail --textbox /tmp/pe-log-view.txt 24 80 --title "Logs: ${log_choice}" --scrolltext
-    rm -f /tmp/pe-log-view.txt
+    show_text "Logs: ${log_choice}" "$logs"
 }
 
 # ════════════════════════════════════════════════════════
@@ -877,52 +782,50 @@ do_view_logs() {
 
 do_service_control() {
     if [ ! -d "$INSTALL_DIR" ]; then
-        whiptail --msgbox "No installation found." 8 $WT_WIDTH --title "Not Installed"
+        note "Not Installed" "No installation found."
         return
     fi
 
     local action
-    action=$(whiptail --menu "Select action:" $WT_HEIGHT $WT_WIDTH 4 \
+    action=$(choose "Select action:" \
         "restart" "Restart all services" \
         "stop"    "Stop all services" \
         "start"   "Start all services" \
-        "status"  "Show container status" \
-        3>&1 1>&2 2>&3) || return
+        "status"  "Show container status")
+    [ -z "$action" ] && return
 
     cd "$INSTALL_DIR"
 
     case "$action" in
         restart)
-            whiptail --infobox "Restarting services..." 5 $WT_WIDTH
-            $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" restart >> "$LOG" 2>&1
+            gauge_msg "" "Restarting services..."
+            $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" restart 2>&1 | tee -a "$LOG"
             sleep 3
             if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
-                whiptail --msgbox "Services restarted successfully." 8 $WT_WIDTH --title "Done"
+                note "Done" "Services restarted successfully."
             else
-                whiptail --msgbox "Services restarted but health check pending.\nThey may still be coming up." 10 $WT_WIDTH --title "Warning"
+                note "Warning" "Services restarted but health check pending.\nThey may still be coming up."
             fi
             ;;
         stop)
-            whiptail --infobox "Stopping services..." 5 $WT_WIDTH
-            $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" stop >> "$LOG" 2>&1
-            whiptail --msgbox "All services stopped." 8 $WT_WIDTH --title "Done"
+            gauge_msg "" "Stopping services..."
+            $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" stop 2>&1 | tee -a "$LOG"
+            note "Done" "All services stopped."
             ;;
         start)
-            whiptail --infobox "Starting services..." 5 $WT_WIDTH
-            $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d >> "$LOG" 2>&1
+            gauge_msg "" "Starting services..."
+            $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" up -d 2>&1 | tee -a "$LOG"
             sleep 3
             if curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
-                whiptail --msgbox "Services started successfully." 8 $WT_WIDTH --title "Done"
+                note "Done" "Services started successfully."
             else
-                whiptail --msgbox "Services starting... may take a moment." 8 $WT_WIDTH --title "Starting"
+                note "Starting" "Services starting... may take a moment."
             fi
             ;;
         status)
             local status_output
             status_output=$($DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" ps 2>&1)
-            echo "$status_output" > /tmp/pe-status.txt
-            whiptail --textbox /tmp/pe-status.txt 16 80 --title "Container Status" --scrolltext
-            rm -f /tmp/pe-status.txt
+            show_text "Container Status" "$status_output"
             ;;
     esac
 }
@@ -932,40 +835,49 @@ do_service_control() {
 # ════════════════════════════════════════════════════════
 
 main() {
+    if [ ! -e /dev/tty ]; then
+        echo "ERROR: an interactive terminal is required for the menu." >&2
+        exit 1
+    fi
+
     while true; do
         # Build status line
-        local info status_line ip_line
+        local info status status_line ip_line ip stores formulas commit_info
         info=$(get_status_info)
-        local status=$(echo "$info" | cut -d'|' -f1)
-        local ip=$(echo "$info" | cut -d'|' -f2)
-        local stores=$(echo "$info" | cut -d'|' -f3)
-        local formulas=$(echo "$info" | cut -d'|' -f4)
+        status=$(echo "$info" | cut -d'|' -f1)
+        ip=$(echo "$info" | cut -d'|' -f2)
+        stores=$(echo "$info" | cut -d'|' -f3)
+        formulas=$(echo "$info" | cut -d'|' -f4)
 
-        local commit_info=""
+        commit_info=""
         if [ -d "${INSTALL_DIR}/.git" ]; then
             commit_info=$(cd "$INSTALL_DIR" && git log --oneline -1 --format="%h %ci" 2>/dev/null | cut -c1-30)
         fi
 
         case "$status" in
-            RUNNING)      status_line="Status: RUNNING  |  http://${ip}"
+            RUNNING)      status_line="Status: ${C_GREEN}RUNNING${C_OFF}  |  http://${ip}"
                           ip_line="Stores: ${stores}  |  Formulas: ${formulas}  |  ${commit_info}" ;;
-            STOPPED)      status_line="Status: STOPPED  |  ${INSTALL_DIR}"
+            STOPPED)      status_line="Status: ${C_YELLOW}STOPPED${C_OFF}  |  ${INSTALL_DIR}"
                           ip_line="Last update: ${commit_info:-unknown}" ;;
             *)            status_line="Status: NOT INSTALLED"
                           ip_line="Choose Install to get started" ;;
         esac
 
+        echo
+        hr
+        printf '%s  %s%s\n' "$C_BOLD" "${APP_TITLE} Installer" "$C_OFF"
+        printf '  %b\n' "$status_line"
+        printf '  %b\n' "$ip_line"
+        hr
+
         local choice
-        choice=$(whiptail --menu \
-            "${status_line}\n${ip_line}" \
-            $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT \
-            "1" "Install          Fresh production install" \
-            "2" "Update           Pull latest, preserve data, rebuild" \
-            "3" "Remove           Stop and uninstall application" \
-            "4" "Services         Start / Stop / Restart / Status" \
-            "5" "View Logs        Container and install logs" \
-            "6" "Exit" \
-            3>&1 1>&2 2>&3) || break
+        choice=$(choose "Select an option:" \
+            "1" "Install    — fresh production install" \
+            "2" "Update     — pull latest, preserve data, rebuild" \
+            "3" "Remove     — stop and uninstall application" \
+            "4" "Services   — start / stop / restart / status" \
+            "5" "View Logs  — container and install logs" \
+            "6" "Exit")
 
         case "$choice" in
             1) do_install ;;
@@ -974,14 +886,14 @@ main() {
             4) do_service_control ;;
             5) do_view_logs ;;
             6) break ;;
+            *) echo "  Invalid selection." ;;
         esac
     done
 
-    clear
-    echo ""
+    echo
     echo "  ${APP_TITLE} installer closed."
     [ -d "$INSTALL_DIR" ] && echo "  Application: ${INSTALL_DIR}"
-    echo ""
+    echo
 }
 
 main
