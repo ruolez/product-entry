@@ -22,6 +22,45 @@ DC="docker compose"
 PORT=80
 LOG="/tmp/${APP_NAME}-install.log"
 
+# ── Runtime options (set by argument parsing) ───────────
+ASSUME_YES=0   # -y/--yes : answer "yes" to all confirmations, skip pauses
+CLI_IP=""      # --ip <addr> : server IP for install/update (no prompt)
+
+print_usage() {
+    cat <<USAGE
+${APP_TITLE} installer
+
+Usage: sudo bash install.sh [command] [options]
+
+Commands:
+  install            Fresh production install
+  update             Pull latest code, preserve data, rebuild
+  remove             Stop and uninstall the application
+  start|stop|restart Control running services
+  status             Show container status
+  logs [target]      Show logs (target: all|app|nginx|postgres|install; default all)
+  menu               Open the interactive menu (default when no command given)
+  help               Show this help
+
+Options:
+  -y, --yes          Assume "yes" to all confirmations and skip prompts
+                     (non-interactive; for 'remove' this also deletes data)
+  --ip <address>     Server IP for install/update (skips the IP prompt)
+
+Examples:
+  sudo bash install.sh                 # interactive menu
+  sudo bash install.sh update          # update, prompting for confirmation
+  sudo bash install.sh update -y       # update with no prompts
+  sudo bash install.sh restart
+  sudo bash install.sh logs app
+USAGE
+}
+
+# Allow 'help' without root.
+case "${1:-}" in
+    -h|--help|help) print_usage; exit 0 ;;
+esac
+
 # ── Root check ──────────────────────────────────────────
 if [ "$EUID" -ne 0 ]; then
     echo "ERROR: This script must be run as root (sudo)."
@@ -46,12 +85,17 @@ note() {
     [ -n "$title" ] && printf '%s%s%s\n\n' "$C_BOLD" "$title" "$C_OFF"
     printf '%b\n' "$body"
     hr
+    [ "$ASSUME_YES" = "1" ] && return 0
     [ -e /dev/tty ] && read -rp "Press Enter to continue..." _ </dev/tty || true
 }
 
 # Yes/No confirmation (replaces whiptail --yesno). $2 = default (y|n), defaults to n.
 confirm() {
     local q="$1" def="${2:-n}" ans prompt
+    if [ "$ASSUME_YES" = "1" ]; then
+        echo "$q [auto-yes]"
+        return 0
+    fi
     [ "$def" = "y" ] && prompt="[Y/n]" || prompt="[y/N]"
     if [ -e /dev/tty ]; then
         read -rp "$q $prompt: " ans </dev/tty
@@ -95,6 +139,7 @@ show_text() {
     hr
     printf '%s\n' "$content"
     hr
+    [ "$ASSUME_YES" = "1" ] && return 0
     [ -e /dev/tty ] && read -rp "Press Enter to continue..." _ </dev/tty || true
 }
 
@@ -315,7 +360,17 @@ NGEOF
 ask_server_ip() {
     local detected_ip default_ip server_ip
     detected_ip=$(detect_ip)
-    default_ip="${1:-$detected_ip}"
+    default_ip="${CLI_IP:-${1:-$detected_ip}}"
+
+    # Non-interactive: accept the default (CLI --ip or current/detected) without prompting.
+    if [ "$ASSUME_YES" = "1" ] || [ ! -e /dev/tty ]; then
+        if echo "$default_ip" | grep -qP '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$'; then
+            echo "$default_ip"
+            return 0
+        fi
+        echo "  No valid server IP available; pass --ip <address>." >&2
+        return 1
+    fi
 
     printf '\n%sNetwork configuration%s — used for nginx server_name, CORS origin, access URL.\n' \
         "$C_BOLD" "$C_OFF" >&2
@@ -749,6 +804,19 @@ do_remove() {
 #  VIEW LOGS
 # ════════════════════════════════════════════════════════
 
+# print_logs <target>   target = all|app|nginx|postgres|install
+print_logs() {
+    local target="$1" logs=""
+    if [ "$target" = "install" ]; then
+        logs=$(cat "$LOG" 2>/dev/null || echo "No install log found.")
+    else
+        local svc=""
+        [ "$target" != "all" ] && svc="$target"
+        logs=$(cd "$INSTALL_DIR" && $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" logs --tail 100 $svc 2>&1)
+    fi
+    show_text "Logs: ${target}" "$logs"
+}
+
 do_view_logs() {
     if [ ! -d "$INSTALL_DIR" ]; then
         note "Not Installed" "No installation found."
@@ -764,39 +832,17 @@ do_view_logs() {
         "install"  "Installation log (${LOG})")
     [ -z "$log_choice" ] && return
 
-    local logs=""
-    if [ "$log_choice" = "install" ]; then
-        logs=$(cat "$LOG" 2>/dev/null || echo "No install log found.")
-    else
-        local svc=""
-        [ "$log_choice" != "all" ] && svc="$log_choice"
-        logs=$(cd "$INSTALL_DIR" && $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" logs --tail 100 $svc 2>&1)
-    fi
-
-    show_text "Logs: ${log_choice}" "$logs"
+    print_logs "$log_choice"
 }
 
 # ════════════════════════════════════════════════════════
 #  SERVICE CONTROL
 # ════════════════════════════════════════════════════════
 
-do_service_control() {
-    if [ ! -d "$INSTALL_DIR" ]; then
-        note "Not Installed" "No installation found."
-        return
-    fi
-
-    local action
-    action=$(choose "Select action:" \
-        "restart" "Restart all services" \
-        "stop"    "Stop all services" \
-        "start"   "Start all services" \
-        "status"  "Show container status")
-    [ -z "$action" ] && return
-
+# service_action <action>   action = restart|stop|start|status
+service_action() {
     cd "$INSTALL_DIR"
-
-    case "$action" in
+    case "$1" in
         restart)
             gauge_msg "" "Restarting services..."
             $DC -f docker-compose.prod.yml -p "$COMPOSE_PROJECT" restart 2>&1 | tee -a "$LOG"
@@ -828,6 +874,23 @@ do_service_control() {
             show_text "Container Status" "$status_output"
             ;;
     esac
+}
+
+do_service_control() {
+    if [ ! -d "$INSTALL_DIR" ]; then
+        note "Not Installed" "No installation found."
+        return
+    fi
+
+    local action
+    action=$(choose "Select action:" \
+        "restart" "Restart all services" \
+        "stop"    "Stop all services" \
+        "start"   "Start all services" \
+        "status"  "Show container status")
+    [ -z "$action" ] && return
+
+    service_action "$action"
 }
 
 # ════════════════════════════════════════════════════════
@@ -896,4 +959,39 @@ main() {
     echo
 }
 
-main
+# ════════════════════════════════════════════════════════
+#  ENTRY POINT — argument dispatch
+# ════════════════════════════════════════════════════════
+
+cmd=""
+extra=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -y|--yes)   ASSUME_YES=1 ;;
+        --ip)       shift; CLI_IP="${1:-}" ;;
+        --ip=*)     CLI_IP="${1#--ip=}" ;;
+        -h|--help)  print_usage; exit 0 ;;
+        -*)         echo "Unknown option: $1" >&2; echo; print_usage >&2; exit 2 ;;
+        *)          if [ -z "$cmd" ]; then cmd="$1"; else extra="$1"; fi ;;
+    esac
+    shift
+done
+
+require_installed() {
+    if [ ! -d "$INSTALL_DIR" ]; then
+        note "Not Installed" "No installation found at ${INSTALL_DIR}."
+        exit 1
+    fi
+}
+
+case "$cmd" in
+    ""|menu)  main ;;
+    install)  do_install ;;
+    update)   do_update ;;
+    remove)   do_remove ;;
+    start|stop|restart|status)
+              require_installed; service_action "$cmd" ;;
+    logs)     require_installed; print_logs "${extra:-all}" ;;
+    help)     print_usage ;;
+    *)        echo "Unknown command: $cmd" >&2; echo; print_usage >&2; exit 2 ;;
+esac
