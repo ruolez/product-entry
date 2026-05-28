@@ -839,10 +839,12 @@ function renderWatermarkPreviews() {
 // ── Generic Autocomplete ───────────────────────────────
 const _acBound = {};
 
-function bindAutocomplete(inputId, dropdownId, getItems, onSelect) {
+function bindAutocomplete(inputId, dropdownId, getItems, onSelect, options = {}) {
     const input = document.getElementById(inputId);
     const dropdown = document.getElementById(dropdownId);
     if (!input || !dropdown) return;
+
+    const { showAllWhenEmpty = false, allowNewValue = false } = options;
 
     // Remove old listeners if rebinding
     if (_acBound[inputId]) {
@@ -851,6 +853,7 @@ function bindAutocomplete(inputId, dropdownId, getItems, onSelect) {
         input.removeEventListener("keydown", old.onKeydown);
         input.removeEventListener("blur", old.onBlur);
         input.removeEventListener("focus", old.onFocus);
+        if (old.onClick) input.removeEventListener("click", old.onClick);
     }
 
     let activeIndex = -1;
@@ -860,9 +863,14 @@ function bindAutocomplete(inputId, dropdownId, getItems, onSelect) {
         const q = query.toLowerCase();
         const filtered = q
             ? items.filter(item => item.toLowerCase().includes(q)).slice(0, 10)
-            : [];
+            : (showAllWhenEmpty ? items.slice(0, 10) : []);
 
-        if (!filtered.length) {
+        // Optionally append "+ Use new value" footer when typed value isn't already present
+        const showNewRow = allowNewValue && q && !items.some(v => v.toLowerCase() === q);
+        const rows = filtered.map(v => ({ kind: "existing", value: v }));
+        if (showNewRow) rows.push({ kind: "new", value: query });
+
+        if (!rows.length) {
             dropdown.classList.add("hidden");
             if (q && items.length === 0) {
                 dropdown.innerHTML = '<div class="autocomplete-item" style="color:var(--md-on-surface-variant);cursor:default;"><span class="ac-subcat">No data loaded — select a store first</span></div>';
@@ -872,11 +880,21 @@ function bindAutocomplete(inputId, dropdownId, getItems, onSelect) {
             return;
         }
 
-        dropdown.innerHTML = filtered.map((item, i) => `
-            <div class="autocomplete-item ${i === activeIndex ? "active" : ""}" data-index="${i}" data-value="${escapeHtml(item)}">
-                <span class="ac-subcat">${highlightMatch(item, query)}</span>
-            </div>
-        `).join("");
+        dropdown.innerHTML = rows.map((row, i) => {
+            const activeCls = i === activeIndex ? "active" : "";
+            if (row.kind === "new") {
+                return `
+                    <div class="autocomplete-item ac-new ${activeCls}" data-index="${i}" data-value="${escapeHtml(row.value)}">
+                        <span class="ac-subcat">+ Use new value: "${escapeHtml(row.value)}"</span>
+                    </div>
+                `;
+            }
+            return `
+                <div class="autocomplete-item ${activeCls}" data-index="${i}" data-value="${escapeHtml(row.value)}">
+                    <span class="ac-subcat">${highlightMatch(row.value, query)}</span>
+                </div>
+            `;
+        }).join("");
         dropdown.classList.remove("hidden");
 
         dropdown.querySelectorAll(".autocomplete-item[data-value]").forEach(el => {
@@ -923,15 +941,21 @@ function bindAutocomplete(inputId, dropdownId, getItems, onSelect) {
     };
 
     const onFocus = () => {
-        if (input.value.trim()) render(input.value.trim());
+        const q = input.value.trim();
+        if (q || showAllWhenEmpty) render(q);
     };
+
+    const onClick = showAllWhenEmpty ? () => {
+        if (dropdown.classList.contains("hidden")) render(input.value.trim());
+    } : null;
 
     input.addEventListener("input", onInput);
     input.addEventListener("keydown", onKeydown);
     input.addEventListener("blur", onBlur);
     input.addEventListener("focus", onFocus);
+    if (onClick) input.addEventListener("click", onClick);
 
-    _acBound[inputId] = { onInput, onKeydown, onBlur, onFocus };
+    _acBound[inputId] = { onInput, onKeydown, onBlur, onFocus, onClick };
 }
 
 function highlightMatch(text, query) {
@@ -1396,19 +1420,20 @@ function renderAddVariantUI(snap) {
         </div>
     `;
 
-    // New variant form — text inputs with datalist for suggestions (allows new values)
+    // New variant form — styled custom dropdown (looks like a regular dropdown, still allows typing new values)
     const optionSelectors = productOptions.map((opt, i) => {
         const savedVal = savedNew.optionValues?.[i]?.name || "";
-        const listId = `sp-new-variant-optlist-${i}`;
+        const ddId = `sp-new-variant-optdd-${i}`;
         return `
-            <div class="form-group" style="flex:1; min-width:120px;">
+            <div class="form-group" style="flex:1; min-width:120px; position:relative;">
                 <label>${escapeHtml(opt.name)} <span class="required-mark">*</span></label>
-                <input type="text" class="form-input" id="sp-new-variant-opt-${i}" data-option-index="${i}"
-                       list="${listId}" value="${escapeHtml(savedVal)}"
-                       placeholder="Select or type new ${escapeHtml(opt.name)}..." autocomplete="off">
-                <datalist id="${listId}">
-                    ${opt.values.map(val => `<option value="${escapeHtml(val)}">`).join("")}
-                </datalist>
+                <div class="ac-input-wrap">
+                    <input type="text" class="form-input ac-input" id="sp-new-variant-opt-${i}" data-option-index="${i}"
+                           value="${escapeHtml(savedVal)}"
+                           placeholder="Select or type new ${escapeHtml(opt.name)}..." autocomplete="off">
+                    <span class="ac-chevron material-icons-round">expand_more</span>
+                </div>
+                <div class="autocomplete-dropdown hidden" id="${ddId}"></div>
             </div>
         `;
     }).join("");
@@ -1498,10 +1523,22 @@ function renderAddVariantUI(snap) {
         }
     }
 
-    // Bind input events for duplicate variant combination detection
-    productOptions.forEach((_, i) => {
-        const input = document.getElementById(`sp-new-variant-opt-${i}`);
+    // Bind styled autocomplete dropdowns + duplicate detection for variant option inputs
+    productOptions.forEach((opt, i) => {
+        const inputId = `sp-new-variant-opt-${i}`;
+        const ddId = `sp-new-variant-optdd-${i}`;
+        bindAutocomplete(inputId, ddId, () => opt.values || [], () => checkDuplicateVariant(),
+                         { showAllWhenEmpty: true, allowNewValue: true });
+        const input = document.getElementById(inputId);
         if (input) input.addEventListener("input", checkDuplicateVariant);
+        // Chevron click → focus the input (which opens the dropdown via onFocus)
+        const chevron = input?.parentElement?.querySelector(".ac-chevron");
+        if (chevron) {
+            chevron.addEventListener("mousedown", (e) => {
+                e.preventDefault();
+                input.focus();
+            });
+        }
     });
 
     // Bind SKU/barcode duplicate check for variant fields

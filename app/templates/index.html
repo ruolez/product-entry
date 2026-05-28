@@ -111,6 +111,27 @@
         padding: 0;
         border-radius: 2px;
     }
+    .autocomplete-item.ac-new {
+        color: var(--md-primary);
+        font-style: italic;
+        border-top: 1px solid var(--md-outline-variant);
+    }
+    .autocomplete-item.ac-new .ac-subcat { color: var(--md-primary); }
+
+    /* Input + chevron wrapper for custom dropdowns that match .form-select look */
+    .ac-input-wrap { position: relative; }
+    .ac-input-wrap .ac-chevron {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 20px;
+        color: var(--md-on-surface-variant);
+        pointer-events: auto;
+        cursor: pointer;
+        user-select: none;
+    }
+    .ac-input-wrap .ac-input { padding-right: 32px; }
 
     /* Category breadcrumb */
     .category-breadcrumb {
