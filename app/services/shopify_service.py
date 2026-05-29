@@ -320,12 +320,18 @@ def lookup_product_by_barcode(barcode):
     found_in_stores = []
     per_store_products = {}
     first_product = None
+    lookup_errors = {}
 
     for store in stores:
         try:
             data = execute_graphql(store["id"], query)
             products = data.get("products", {}).get("nodes", [])
 
+            # Collect every product in this store whose variants include the
+            # barcode. >1 is a Shopify-side data-quality issue (duplicate
+            # barcodes) we need to surface — we still load the first match so
+            # the form is usable, but the user gets a warning.
+            matches = []
             for product in products:
                 variants = product.get("variants", {}).get("nodes", [])
                 matched_variant = None
@@ -333,23 +339,40 @@ def lookup_product_by_barcode(barcode):
                     if v.get("barcode") == barcode:
                         matched_variant = v
                         break
+                if matched_variant:
+                    matches.append((product, matched_variant, variants))
 
-                if not matched_variant:
-                    continue
+            if not matches:
+                continue
 
-                found_in_stores.append(store["name"])
-                all_variants = product.get("variants", {}).get("nodes", [])
-                normalized = _normalize_lookup_result(product, matched_variant, all_variants)
-                per_store_products[str(store["id"])] = normalized
-                if first_product is None:
-                    first_product = normalized
-                break
+            first_match_product, first_match_variant, first_match_variants = matches[0]
+            normalized = _normalize_lookup_result(
+                first_match_product, first_match_variant, first_match_variants
+            )
 
-        except Exception:
+            if len(matches) > 1:
+                normalized["barcodeCollision"] = True
+                normalized["collisionCandidates"] = [
+                    {
+                        "id": p.get("id"),
+                        "title": p.get("title", ""),
+                        "handle": p.get("handle", ""),
+                        "vendor": p.get("vendor", ""),
+                    }
+                    for p, _v, _vs in matches
+                ]
+
+            found_in_stores.append(store["name"])
+            per_store_products[str(store["id"])] = normalized
+            if first_product is None:
+                first_product = normalized
+
+        except Exception as e:
+            lookup_errors[store["name"]] = str(e)
             continue
 
     if not first_product:
-        return {"found": False}
+        return {"found": False, "lookup_errors": lookup_errors}
 
     # If any store has the product configured with variants, promote variant
     # info onto a copy so the per-store entry stays untouched.
@@ -369,6 +392,7 @@ def lookup_product_by_barcode(barcode):
         "per_store_products": per_store_products,
         "found_in_stores": found_in_stores,
         "source_store": found_in_stores[0] if found_in_stores else None,
+        "lookup_errors": lookup_errors,
     }
 
 
@@ -409,19 +433,35 @@ def _normalize_lookup_result(product, variant, all_variants=None):
         "templateSuffix": product.get("templateSuffix", ""),
     }
 
-    seo = product.get("seo")
-    if seo:
-        result["seo"] = {
-            "title": seo.get("title", ""),
-            "description": seo.get("description", ""),
-        }
+    # Carry the matched Shopify product identity through so the frontend can
+    # show the user exactly which product was loaded into each store's tab.
+    result["matchedProductId"] = product.get("id", "")
+    result["matchedTitle"] = product.get("title", "")
+    result["matchedHandle"] = product.get("handle", "")
+    result["matchedVendor"] = product.get("vendor", "")
+
+    # SEO: Product.seo.{title,description} is the canonical Shopify field, but
+    # it's not guaranteed to mirror the underlying global.title_tag /
+    # global.description_tag metafields — third-party SEO apps frequently write
+    # to the metafield only. Fall back to the metafield when seo.* is empty.
+    raw_metafields = product.get("metafields", {}).get("nodes", []) or []
+    global_tags = {}
+    for mf in raw_metafields:
+        if mf.get("namespace") == "global" and mf.get("key") in ("title_tag", "description_tag"):
+            global_tags[mf["key"]] = mf.get("value") or ""
+
+    seo = product.get("seo") or {}
+    seo_title = seo.get("title") or global_tags.get("title_tag", "")
+    seo_description = seo.get("description") or global_tags.get("description_tag", "")
+    if seo_title or seo_description:
+        result["seo"] = {"title": seo_title, "description": seo_description}
 
     # Keep only pinned metafields (those backed by a pinned definition in this
     # store). Unstructured metafields have no definition; unpinned definitions
     # have a null pinnedPosition. Each store's query runs against that store, so
     # this yields that store's own pinned set, ordered as in the Shopify admin.
     pinned_metafields = []
-    for mf in product.get("metafields", {}).get("nodes", []):
+    for mf in raw_metafields:
         if not mf.get("key"):
             continue
         definition = mf.get("definition")

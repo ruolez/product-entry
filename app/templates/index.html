@@ -1339,6 +1339,14 @@
                         <span class="material-icons-round expand-icon" style="font-size:18px;">expand_more</span>
                     </div>
                     <div class="shopify-section-body">
+                        <!-- Matched-Shopify-product subtitle: shown only in lookup mode so
+                             the user can verify which product was loaded into the active
+                             store's tab. Populated/updated by restoreFormState. -->
+                        <div id="sp-seo-matched-product" class="hidden" style="font-size:12px;color:var(--md-text-secondary,#5f6368);margin-bottom:var(--md-spacing-sm);"></div>
+                        <!-- Barcode-collision warning: more than one product in this store
+                             shares the looked-up barcode. Lists the candidates so the user
+                             can fix the duplicate in Shopify admin. -->
+                        <div id="sp-seo-collision-warning" class="hidden" style="background:#fce8e6;color:#a50e0e;border:1px solid #f4c7c3;border-radius:6px;padding:8px 12px;margin-bottom:var(--md-spacing-sm);font-size:13px;line-height:1.45;"></div>
                         <div class="seo-preview" id="sp-seo-preview">
                             <div class="seo-preview-title" id="sp-seo-preview-title">Page title</div>
                             <div class="seo-preview-url" id="sp-seo-preview-url">https://store.myshopify.com/products/</div>

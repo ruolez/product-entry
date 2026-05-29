@@ -362,6 +362,21 @@ function captureFormState() {
         }
     }
 
+    // Preserve read-only matched-Shopify-product identity from the prior snapshot.
+    // captureFormState reads only DOM fields and these aren't editable, so without
+    // this carry-over they'd be lost every time the user switched stores.
+    const prevSnap = state.perStoreProductData[state.activeStoreId];
+    if (prevSnap) {
+        if (prevSnap.matchedProductId) result.matchedProductId = prevSnap.matchedProductId;
+        if (prevSnap.matchedTitle) result.matchedTitle = prevSnap.matchedTitle;
+        if (prevSnap.matchedHandle) result.matchedHandle = prevSnap.matchedHandle;
+        if (prevSnap.matchedVendor) result.matchedVendor = prevSnap.matchedVendor;
+        if (prevSnap.barcodeCollision) result.barcodeCollision = true;
+        if (Array.isArray(prevSnap.collisionCandidates) && prevSnap.collisionCandidates.length) {
+            result.collisionCandidates = prevSnap.collisionCandidates.map(c => ({ ...c }));
+        }
+    }
+
     return result;
 }
 
@@ -406,6 +421,7 @@ function restoreFormState(snap) {
     renderMetafields();
     renderCollectionChips();
     updateSeoPreview();
+    renderMatchedProductInfo(snap);
 
     document.getElementById("sp-error-title").textContent = "";
 
@@ -1853,6 +1869,41 @@ function updateSeoPreview() {
     document.getElementById("sp-seo-preview-desc").textContent = desc;
 }
 
+// Render the matched-Shopify-product subtitle + collision warning inside the
+// SEO listing section for the currently active store. Driven entirely by the
+// per-store snapshot so it stays correct on store switch.
+function renderMatchedProductInfo(snap) {
+    const subtitleEl = document.getElementById("sp-seo-matched-product");
+    const warningEl = document.getElementById("sp-seo-collision-warning");
+    if (!subtitleEl || !warningEl) return;
+
+    const storeName = state.stores.find(s => s.id === state.activeStoreId)?.name || "";
+
+    if (snap?.matchedProductId) {
+        const title = snap.matchedTitle || "(untitled)";
+        const handle = snap.matchedHandle ? ` · ${snap.matchedHandle}` : "";
+        subtitleEl.textContent = `Matched in ${storeName}: ${title}${handle}`;
+        subtitleEl.classList.remove("hidden");
+    } else {
+        subtitleEl.textContent = "";
+        subtitleEl.classList.add("hidden");
+    }
+
+    if (snap?.barcodeCollision && Array.isArray(snap.collisionCandidates) && snap.collisionCandidates.length > 1) {
+        const candidates = snap.collisionCandidates
+            .map(c => `${escapeHtml(c.title || "(untitled)")}${c.handle ? ` <code>${escapeHtml(c.handle)}</code>` : ""}`)
+            .join("<br>&nbsp;&nbsp;• ");
+        warningEl.innerHTML =
+            `<strong>⚠ Duplicate barcode in ${escapeHtml(storeName)}:</strong> ` +
+            `${snap.collisionCandidates.length} products share this barcode. ` +
+            `Loaded the first one — fix the duplicates in Shopify admin:<br>&nbsp;&nbsp;• ${candidates}`;
+        warningEl.classList.remove("hidden");
+    } else {
+        warningEl.innerHTML = "";
+        warningEl.classList.add("hidden");
+    }
+}
+
 // ── Action Buttons ─────────────────────────────────────
 function bindActionButtons() {
     document.getElementById("sp-btn-save").addEventListener("click", saveProduct);
@@ -2215,6 +2266,9 @@ function clearForm() {
     document.getElementById("sp-seo-handle").value = "";
     document.getElementById("sp-seo-handle")._userEdited = false;
     document.getElementById("sp-template").value = "";
+    // Hide the lookup-only matched-product subtitle and collision warning.
+    document.getElementById("sp-seo-matched-product")?.classList.add("hidden");
+    document.getElementById("sp-seo-collision-warning")?.classList.add("hidden");
 
     state.options = [];
     state.variants = [];
@@ -2447,14 +2501,48 @@ async function selectLookupProduct(storeId, productId, barcode) {
                     `Found in: ${result.found_in_stores.join(", ")}`,
                     result.per_store_products,
                 );
+                reportLookupDiagnostics(result);
                 return;
             }
+            reportLookupDiagnostics(result);
         }
         // Fallback: fetch from the single store that had it
         const product = await api.get(`/api/shopify/products/detail/${storeId}/${encodeURIComponent(productId)}`);
         applyLookupData(product, null);
     } catch (err) {
         showToast(`Failed to load product details: ${err.message}`, "error");
+    }
+}
+
+// Summary toasts for cross-cutting issues that aren't tied to a single store
+// tab: per-store GraphQL errors that lookup_product_by_barcode collected, and
+// barcode collisions (multiple Shopify products in one store share the barcode).
+function reportLookupDiagnostics(result) {
+    const errors = result?.lookup_errors || {};
+    const errorNames = Object.keys(errors);
+    if (errorNames.length) {
+        showToast(
+            `Lookup failed in ${errorNames.length} store(s): ${errorNames.join(", ")}. Check API tokens / scopes.`,
+            "warning",
+            8000,
+        );
+    }
+
+    const perStore = result?.per_store_products || {};
+    const collisionStores = [];
+    for (const sid of Object.keys(perStore)) {
+        const entry = perStore[sid];
+        if (entry?.barcodeCollision) {
+            const storeName = state.stores.find(s => String(s.id) === sid)?.name || `Store ${sid}`;
+            collisionStores.push(`${storeName} (${entry.collisionCandidates?.length || 0})`);
+        }
+    }
+    if (collisionStores.length) {
+        showToast(
+            `⚠ Duplicate barcode in: ${collisionStores.join(", ")}. See the SEO section for details — fix in Shopify admin.`,
+            "warning",
+            10000,
+        );
     }
 }
 
@@ -2478,10 +2566,12 @@ async function lookupByBarcode() {
 
         if (!result.found) {
             showToast("No product found with this barcode", "warning");
+            reportLookupDiagnostics(result);
             return;
         }
 
         applyLookupData(result.product, `Found in: ${result.found_in_stores.join(", ")}`, result.per_store_products);
+        reportLookupDiagnostics(result);
     } catch (err) {
         showToast(`Lookup failed: ${err.message}`, "error");
     } finally {
@@ -2560,6 +2650,14 @@ function applyLookupData(p, extraInfo, perStoreProducts) {
     delete state._lookupBaseTemplate.shopifyProductId;
     delete state._lookupBaseTemplate.existingVariants;
     delete state._lookupBaseTemplate.productOptions;
+    // The matched-Shopify-product identity is per store; a base template used
+    // to seed a *different* store must not carry the first store's match.
+    state._lookupBaseTemplate.matchedProductId = "";
+    state._lookupBaseTemplate.matchedTitle = "";
+    state._lookupBaseTemplate.matchedHandle = "";
+    state._lookupBaseTemplate.matchedVendor = "";
+    state._lookupBaseTemplate.barcodeCollision = false;
+    state._lookupBaseTemplate.collisionCandidates = [];
 
     // Load active store's data into the form
     const activeSnap = state.perStoreProductData[state.activeStoreId];
@@ -2617,6 +2715,15 @@ function productToSnapshot(p) {
         options: [],
         variants: [],
         selectedCollections: Array.isArray(p.collections) ? p.collections.map(c => ({ ...c })) : [],
+        // Matched-Shopify-product identity + collision metadata for the per-store
+        // UI. These are read-only display fields; captureFormState does not write
+        // them back (the user can't edit which Shopify product they matched).
+        matchedProductId: p.matchedProductId || "",
+        matchedTitle: p.matchedTitle || "",
+        matchedHandle: p.matchedHandle || "",
+        matchedVendor: p.matchedVendor || "",
+        barcodeCollision: !!p.barcodeCollision,
+        collisionCandidates: Array.isArray(p.collisionCandidates) ? p.collisionCandidates.map(c => ({ ...c })) : [],
     };
 
     if (p.isVariantProduct) {
