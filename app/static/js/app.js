@@ -1122,6 +1122,21 @@ async function saveItem(andNew = false) {
                     });
                     return prices;
                 })(),
+                per_store_fields: (() => {
+                    const fields = {};
+                    state.selectedStoreIds.forEach(sid => {
+                        const d = state.perStoreData[sid];
+                        if (d) {
+                            fields[String(sid)] = {
+                                CateID: d.CateID ?? null,
+                                SubCateID: d.SubCateID ?? null,
+                                ManuID: d.ManuID ?? null,
+                                UnitID: d.UnitID ?? null,
+                            };
+                        }
+                    });
+                    return fields;
+                })(),
             };
         } else {
             data = collectFormData();

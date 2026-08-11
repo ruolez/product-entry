@@ -314,6 +314,14 @@ def insert_sibling_item(data):
             if val is not None and val != "":
                 merged[price_field] = val
 
+        # Apply per-store lookup-field overrides; null/0/empty keeps the source value
+        per_store_fields = data.get("per_store_fields", {})
+        store_fields = per_store_fields.get(str(store_id), {})
+        for field in ("CateID", "SubCateID", "ManuID", "UnitID"):
+            val = store_fields.get(field)
+            if val not in (None, "", 0):
+                merged[field] = val
+
         try:
             sql, params = _build_insert(merged)
             product_id = execute_insert(store_id, sql, params)
